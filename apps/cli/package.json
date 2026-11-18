@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "bin": { "orbit": "./dist/cli.js" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && tsup src/cli.ts --format esm --platform node --target node22 --clean"
+  },
   "dependencies": {
     "@orbitspace/shared-types": "workspace:*",
     "commander": "15.1.0",
