@@ -21,7 +21,12 @@ public enum KernelErrorCode implements ErrorCode {
     RESOURCE_NOT_FOUND(404, "Resource not found."),
     INVITE_UNAVAILABLE(410, "The invitation is no longer available."),
     DEVICE_ACCESS_DENIED(400, "Device authorization was denied."),
-    INTERNAL_ERROR(500, "The request could not be completed.");
+    INTERNAL_ERROR(500, "The request could not be completed."),
+    QUOTA_EXCEEDED(409, "Storage quota exceeded."),
+    SHARE_REVOKED(403, "The file share has been revoked."),
+    DOWNLOAD_LIMIT_EXCEEDED(403, "The download limit for this share has been reached."),
+    NOT_FRIENDS_FOR_AIRDROP(403, "Independent file airdrop requires an active friendship."),
+    DIFF_DATA_INSUFFICIENT(409, "Insufficient shared content to compute a deterministic diff.");
 
     private final int httpStatus;
     private final String defaultMessage;

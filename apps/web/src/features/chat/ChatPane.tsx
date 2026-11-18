@@ -90,6 +90,22 @@ function messageSnippet(msg: ChatMessage, cardView?: CardView): string {
         return `[WIP] ${cardView.label}`;
       }
       return `[WIP 快照] ${msg.content.purpose ?? "工作区快照"}`;
+    case "FILE_REF":
+      if (cardView && cardView.state !== "AVAILABLE") {
+        return "[文件引用不可用]";
+      }
+      if (cardView?.state === "AVAILABLE") {
+        return `[文件] ${cardView.label}`;
+      }
+      return `[文件引用] ${msg.content.purpose ?? "共享文件"}`;
+    case "CODE_COMMENT_REF":
+      if (cardView && cardView.state !== "AVAILABLE") {
+        return "[代码批注不可用]";
+      }
+      if (cardView?.state === "AVAILABLE") {
+        return `[代码批注] ${cardView.label}`;
+      }
+      return `[代码批注] ${msg.content.purpose ?? "行级批注"}`;
   }
 }
 
@@ -870,7 +886,11 @@ export function ChatPane({
                   <code>
                     {item.payload.content.kind === "COMMIT_REF"
                       ? `Commit ${shortId(item.payload.content.commitOid)}`
-                      : `WIP ${shortId(item.payload.content.snapshotId)}`}
+                      : item.payload.content.kind === "WIP_REF"
+                        ? `WIP ${shortId(item.payload.content.snapshotId)}`
+                        : item.payload.content.kind === "FILE_REF"
+                          ? `File ${shortId(item.payload.content.targetId)}`
+                          : `Comment ${shortId(item.payload.content.commentId)}`}
                   </code>
                   {item.payload.content.purpose && (
                     <p className="chat-msg-text">{item.payload.content.purpose}</p>

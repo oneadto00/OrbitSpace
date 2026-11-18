@@ -1138,6 +1138,8 @@ public class ChatService
             case COMMIT_REF -> new CommitRefContent(refProjectId, refTargetId, refPurpose);
             case WIP_REF -> new WipRefContent(refProjectId, refTargetId, refPurpose);
             case SYSTEM -> new SystemContent(bodyText);
+            case FILE_REF, CODE_COMMENT_REF ->
+                    throw new IllegalStateException("Unsupported message kind in P1 chat: " + kind);
         };
 
         return new ChatMessage(

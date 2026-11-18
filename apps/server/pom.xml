@@ -22,6 +22,9 @@
         <module>orbit-mod-space</module>
         <module>orbit-mod-chat</module>
         <module>orbit-mod-gitproject</module>
+        <module>orbit-mod-friendship</module>
+        <module>orbit-mod-file</module>
+        <module>orbit-mod-integration</module>
         <module>orbit-app</module>
     </modules>
 
@@ -89,6 +92,21 @@
             <dependency>
                 <groupId>com.orbitspace</groupId>
                 <artifactId>orbit-mod-gitproject</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.orbitspace</groupId>
+                <artifactId>orbit-mod-friendship</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.orbitspace</groupId>
+                <artifactId>orbit-mod-file</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.orbitspace</groupId>
+                <artifactId>orbit-mod-integration</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

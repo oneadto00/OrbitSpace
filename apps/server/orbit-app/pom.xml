@@ -46,6 +46,21 @@
             <scope>runtime</scope>
         </dependency>
         <dependency>
+            <groupId>com.orbitspace</groupId>
+            <artifactId>orbit-mod-friendship</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.orbitspace</groupId>
+            <artifactId>orbit-mod-file</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.orbitspace</groupId>
+            <artifactId>orbit-mod-integration</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>

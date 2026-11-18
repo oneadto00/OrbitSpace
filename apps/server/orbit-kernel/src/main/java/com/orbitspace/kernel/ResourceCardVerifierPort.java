@@ -3,14 +3,25 @@ package com.orbitspace.kernel;
 import java.util.Objects;
 
 public interface ResourceCardVerifierPort {
-    /** targetId is the full Git OID for COMMIT_REF and the immutable snapshot ID for WIP_REF. */
-    record Reference(MessageKind kind, String projectId, String targetId) {
+    /**
+     * Resource card reference. targetId is the full Git OID for COMMIT_REF, the immutable snapshot
+     * ID for WIP_REF, the file or airdrop share ID for FILE_REF, and the comment ID for
+     * CODE_COMMENT_REF.
+     */
+    record Reference(MessageKind kind, String projectId, String targetId, GrantType grantType) {
         public Reference {
-            if (kind != MessageKind.COMMIT_REF && kind != MessageKind.WIP_REF) {
-                throw new IllegalArgumentException("Expected a Git resource reference");
+            Objects.requireNonNull(kind);
+            if (kind == MessageKind.TEXT || kind == MessageKind.SYSTEM) {
+                throw new IllegalArgumentException("Expected a resource card reference kind");
             }
-            Objects.requireNonNull(projectId);
+            if (kind != MessageKind.FILE_REF) {
+                Objects.requireNonNull(projectId);
+            }
             Objects.requireNonNull(targetId);
+        }
+
+        public Reference(MessageKind kind, String projectId, String targetId) {
+            this(kind, projectId, targetId, null);
         }
     }
 
