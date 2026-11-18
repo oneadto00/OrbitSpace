@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { spaceKey, type SpaceAccess } from "../../../shared/api/access";
 import type { GitWorkspaceSlotProps } from "../../../shared/contracts/gitWorkspaceContract";
-import { Button, Loading, ResourceStateCard } from "../../../shared/ui/components";
+import { Button, Loading, ResourceStateCard } from "../../../shared/ui/UiComponents";
 import {
   buildCommitPatchPath,
   buildSnapshotPatchPath,
@@ -32,7 +32,7 @@ import {
   gitCanvasErrorText,
   resolveResourceCardState,
   retrySnapshotParseJob,
-} from "../api/gitCanvasApi";
+} from "../gitCanvasApi";
 import {
   CAPTURE_STATE_LABELS,
   CONTENT_MANIFEST_META,

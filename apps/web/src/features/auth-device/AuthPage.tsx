@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Brand, Button, Failure, Field } from "../../shared/ui/components";
+import { Brand, Button, Failure, Field } from "../../shared/ui/UiComponents";
 import { login, publicPost } from "../../shared/api/httpClient";
 
 type Mode = "login" | "register" | "verify" | "forgot" | "reset";

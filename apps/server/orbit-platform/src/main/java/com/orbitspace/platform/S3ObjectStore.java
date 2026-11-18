@@ -97,14 +97,14 @@ public class S3ObjectStore implements ObjectStoragePort {
             throw new IllegalArgumentException("Invalid upload");
         Path spool = Files.createTempFile("orbit-upload-", ".part");
         try {
-            MessageDigest digest = PlatformValues.sha256();
+            MessageDigest digest = PlatformValueSupport.sha256();
             long size;
             try (OutputStream out = Files.newOutputStream(spool)) {
                 size = transfer(bytes, out, digest, sizeLimit);
             }
             StoredObject object =
                     new StoredObject(
-                            "temporary/" + PlatformValues.digest(uploadId),
+                            "temporary/" + PlatformValueSupport.digest(uploadId),
                             size,
                             HexFormat.of().formatHex(digest.digest()));
             reserve(object);
@@ -184,7 +184,7 @@ public class S3ObjectStore implements ObjectStoragePort {
                         }
                         if (!"TEMP_UPLOADED".equals(source.status()))
                             throw new DomainException(KernelErrorCode.RESOURCE_EXPIRED_OR_PURGED);
-                        MessageDigest digest = PlatformValues.sha256();
+                        MessageDigest digest = PlatformValueSupport.sha256();
                         try (InputStream input =
                                 s3.getObject(b -> b.bucket(bucket).key(temporaryKey))) {
                             long size =
@@ -233,7 +233,7 @@ public class S3ObjectStore implements ObjectStoragePort {
 
     private Timestamp cutoff(Instant requested) {
         Instant allowed = Instant.now().minus(grace);
-        return PlatformValues.time(requested.isBefore(allowed) ? requested : allowed);
+        return PlatformValueSupport.time(requested.isBefore(allowed) ? requested : allowed);
     }
 
     @Override
@@ -301,7 +301,7 @@ public class S3ObjectStore implements ObjectStoragePort {
                         Boolean.class,
                         candidate.objectKey(),
                         bucket,
-                        PlatformValues.time(candidate.unreferencedSince()),
+                        PlatformValueSupport.time(candidate.unreferencedSince()),
                         cutoff(cutoff)));
     }
 

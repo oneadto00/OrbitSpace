@@ -4,7 +4,7 @@ import { AlertCircle, ArrowRight, RefreshCw, UserPlus } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { queryClient, spacesKey } from "../../shared/api/access";
 import { useAuth } from "../../shared/auth/session";
-import { Button, Loading } from "../../shared/ui/components";
+import { Button, Loading } from "../../shared/ui/UiComponents";
 import {
   featureErrorText,
   joinSpaceByToken,

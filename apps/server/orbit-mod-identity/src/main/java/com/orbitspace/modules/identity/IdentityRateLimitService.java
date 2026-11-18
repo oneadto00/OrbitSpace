@@ -1,17 +1,17 @@
-package com.orbitspace.identity;
+package com.orbitspace.modules.identity;
 
 import com.orbitspace.kernel.*;
 import java.time.Duration;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-final class RequestLimits {
+final class IdentityRateLimitService {
     private final RateLimitPort rate;
-    RequestLimits(RateLimitPort rate) { this.rate = rate; }
+    IdentityRateLimitService(RateLimitPort rate) { this.rate = rate; }
 
     void apply(String operation, HttpServletRequest req, HttpServletResponse res, int ipLimit, String subject, int subjectLimit) {
-        acquire(operation + ":ip:" + Secrets.hash(req.getRemoteAddr()), ipLimit, res);
-        if (subject != null) acquire(operation + ":subject:" + Secrets.hash(subject), subjectLimit, res);
+        acquire(operation + ":ip:" + IdentitySecrets.hash(req.getRemoteAddr()), ipLimit, res);
+        if (subject != null) acquire(operation + ":subject:" + IdentitySecrets.hash(subject), subjectLimit, res);
     }
 
     private void acquire(String key, int limit, HttpServletResponse res) {

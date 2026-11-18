@@ -1,4 +1,4 @@
-package com.orbitspace.identity;
+package com.orbitspace.modules.identity;
 
 import static com.orbitspace.kernel.KernelErrorCode.*;
 import com.orbitspace.kernel.*;
@@ -23,7 +23,7 @@ public class AccountService {
             EmailSenderPort mail, @Value("${orbit.public-origin}") String origin) {
         this.db = db;
         this.passwords = passwords;
-        this.dummyHash = passwords.encode(Secrets.token());
+        this.dummyHash = passwords.encode(IdentitySecrets.token());
         this.sessions = sessions;
         this.mail = mail;
         this.origin = origin;
@@ -34,12 +34,12 @@ public class AccountService {
     @Transactional
     public void register(String email, String password) {
         String normalized = normalize(email);
-        String encoded = passwords.encode(Secrets.password(password));
+        String encoded = passwords.encode(IdentitySecrets.password(password));
         String display = normalized.substring(0, normalized.indexOf('@'));
         db.update("""
                 INSERT INTO users(id,email,display_name,password_hash) VALUES (?,?,?,?)
                 ON DUPLICATE KEY UPDATE id=id
-                """, Secrets.id(), normalized, display.substring(0,Math.min(120,display.length())), encoded);
+                """, IdentitySecrets.id(), normalized, display.substring(0,Math.min(120,display.length())), encoded);
         User user = findUser(normalized);
         if (!user.verified()) send(user, "VERIFY", encoded);
     }
@@ -51,12 +51,12 @@ public class AccountService {
     }
 
     private void send(User user, String purpose, String pendingPassword) {
-        String token = Secrets.token();
+        String token = IdentitySecrets.token();
         db.update("DELETE FROM auth_challenges WHERE user_id=? AND purpose=?",user.id(),purpose);
         db.update("""
                 INSERT INTO auth_challenges(token_hash,user_id,purpose,pending_password_hash,expires_at)
                 VALUES (?,?,?,?,CURRENT_TIMESTAMP(6)+INTERVAL 30 MINUTE)
-                """, Secrets.hash(token),user.id(),purpose,pendingPassword);
+                """, IdentitySecrets.hash(token),user.id(),purpose,pendingPassword);
         boolean verify = purpose.equals("VERIFY");
         String page = verify ? "/verify-email" : "/reset-password";
         String subject = verify ? "验证 OrbitSpace 邮箱" : "重置 OrbitSpace 密码";
@@ -72,7 +72,7 @@ public class AccountService {
 
     @Transactional
     public void consume(String token, String newPassword) {
-        String hash = Secrets.hash(token);
+        String hash = IdentitySecrets.hash(token);
         String purpose = newPassword == null ? "VERIFY" : "RESET";
         String userId = db.query("SELECT user_id FROM auth_challenges WHERE token_hash=? AND purpose=?",
                 (rs,i) -> rs.getString(1),hash,purpose).stream().findFirst().orElseThrow(() -> new DomainException(INVALID_REQUEST));
@@ -86,7 +86,7 @@ public class AccountService {
         if (newPassword == null) {
             db.update("UPDATE users SET email_verified=TRUE,password_hash=? WHERE id=?",challenge,userId);
         } else {
-            db.update("UPDATE users SET password_hash=? WHERE id=?",passwords.encode(Secrets.password(newPassword)),userId);
+            db.update("UPDATE users SET password_hash=? WHERE id=?",passwords.encode(IdentitySecrets.password(newPassword)),userId);
             sessions.revokeAll(userId);
         }
     }
@@ -94,7 +94,7 @@ public class AccountService {
     @Transactional
     public SessionService.Login login(String email, String password, String deviceLabel) {
         var user = findUser(normalize(email));
-        boolean valid = passwords.matches(Secrets.password(password),user == null ? dummyHash : user.passwordHash());
+        boolean valid = passwords.matches(IdentitySecrets.password(password),user == null ? dummyHash : user.passwordHash());
         if (!valid || user == null || !user.verified()) throw new DomainException(AUTH_UNAUTHORIZED);
         return sessions.start(user.id(),deviceLabel);
     }

@@ -1,4 +1,4 @@
-package com.orbitspace.identity;
+package com.orbitspace.modules.identity;
 
 import com.orbitspace.kernel.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,8 +19,8 @@ public class DeviceController {
             @NotBlank @Size(max=160) String projectId, @Positive long membershipEpoch,
             @NotEmpty @Size(max=2) List<@NotBlank String> scopes) {}
     private final DeviceService devices;
-    private final RequestLimits limits;
-    DeviceController(DeviceService devices, RequestLimits limits) { this.devices = devices; this.limits = limits; }
+    private final IdentityRateLimitService limits;
+    DeviceController(DeviceService devices, IdentityRateLimitService limits) { this.devices = devices; this.limits = limits; }
 
     @PostMapping(value="/authorize",consumes=MediaType.APPLICATION_FORM_URLENCODED_VALUE)
     DeviceService.Authorization authorize(@RequestParam("client_id") String client,@RequestParam("device_label") String label,

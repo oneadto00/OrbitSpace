@@ -1,4 +1,4 @@
-package com.orbitspace.identity;
+package com.orbitspace.modules.identity;
 
 import com.orbitspace.kernel.ModuleSecurityCustomizer;
 import static com.orbitspace.kernel.ModuleSecurityCustomizer.Access.*;
@@ -9,9 +9,9 @@ import org.springframework.context.annotation.Import;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 @AutoConfiguration
-@Import({AccountService.class, SessionService.class, DeviceService.class, AccessTokens.class,
-        IdentityAuthentication.class, AccountController.class, DeviceController.class, RequestLimits.class})
-public class IdentityConfiguration {
+@Import({AccountService.class, SessionService.class, DeviceService.class, IdentityAccessTokenService.class,
+        IdentityAuthentication.class, AccountController.class, DeviceController.class, IdentityRateLimitService.class})
+public class IdentityAutoConfiguration {
     @Bean("orbitReplayDEVICE_CREDENTIAL")
     java.util.function.Consumer<com.orbitspace.kernel.RevocationLedgerPort.Entry> deviceReplay(DeviceService devices) {
         return devices::replay;

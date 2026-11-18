@@ -1,7 +1,7 @@
-package com.orbitspace.identity;
+package com.orbitspace.modules.identity;
 
 import com.orbitspace.kernel.AuthenticatedPrincipal;
-import com.orbitspace.security.RefreshCsrfTokens;
+import com.orbitspace.security.RefreshCsrfTokenRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -25,9 +25,9 @@ public class AccountController {
     record Rename(@NotBlank @Size(max=120) String displayName) {}
     private final AccountService accounts;
     private final SessionService sessions;
-    private final RequestLimits limits;
+    private final IdentityRateLimitService limits;
     private final boolean secureCookie;
-    AccountController(AccountService accounts,SessionService sessions,RequestLimits limits,
+    AccountController(AccountService accounts,SessionService sessions,IdentityRateLimitService limits,
             @Value("${orbit.auth.secure-cookie:true}") boolean secureCookie) {
         this.accounts = accounts;
         this.sessions = sessions;
@@ -76,7 +76,7 @@ public class AccountController {
 
     @PostMapping("/refresh")
     SessionService.AccessSession refresh(HttpServletRequest req,HttpServletResponse res) {
-        return response(sessions.rotate(RefreshCsrfTokens.cookie(req)),res);
+        return response(sessions.rotate(RefreshCsrfTokenRepository.cookie(req)),res);
     }
 
     @PostMapping("/logout") @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -111,7 +111,7 @@ public class AccountController {
     }
 
     private void setCookie(HttpServletResponse res,String value,long maxAge) {
-        var cookie = ResponseCookie.from(RefreshCsrfTokens.COOKIE,value).path("/api/v1/auth")
+        var cookie = ResponseCookie.from(RefreshCsrfTokenRepository.COOKIE,value).path("/api/v1/auth")
                 .httpOnly(true).secure(secureCookie).sameSite("Strict").maxAge(Duration.ofSeconds(maxAge)).build();
         res.addHeader(HttpHeaders.SET_COOKIE,cookie.toString());
         res.setHeader(HttpHeaders.CACHE_CONTROL,"no-store");

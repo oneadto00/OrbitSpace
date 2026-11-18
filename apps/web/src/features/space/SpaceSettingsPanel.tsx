@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { queryClient, revokeSpace, spaceKey, spacesKey, type SpaceAccess } from "../../shared/api/access";
 import { canManageSpace } from "../../shared/auth/session";
-import { Button, Loading } from "../../shared/ui/components";
+import { Button, Loading } from "../../shared/ui/UiComponents";
 import {
   changeSpaceMemberRole,
   copyToClipboard,

@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { spaceKey, type SpaceAccess } from "../../shared/api/access";
 import { canManageSpace, canUploadOrManage } from "../../shared/auth/session";
-import { Button, Loading, ResourceStateCard } from "../../shared/ui/components";
+import { Button, Loading, ResourceStateCard } from "../../shared/ui/UiComponents";
 import {
   formatDateTime,
   listSpaceMembers,

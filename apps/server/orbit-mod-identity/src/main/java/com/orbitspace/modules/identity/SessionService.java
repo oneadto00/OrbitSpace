@@ -1,8 +1,8 @@
-package com.orbitspace.identity;
+package com.orbitspace.modules.identity;
 
 import static com.orbitspace.kernel.KernelErrorCode.*;
 import com.orbitspace.kernel.*;
-import com.orbitspace.security.BrowserSessions;
+import com.orbitspace.security.BrowserSessionPort;
 import com.orbitspace.security.WebSocketSecurity.SessionRevoked;
 import java.time.Instant;
 import java.time.Duration;
@@ -12,7 +12,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
-public class SessionService implements BrowserSessions {
+public class SessionService implements BrowserSessionPort {
     static final Duration LIFETIME = Duration.ofDays(30);
     public record AccessSession(String accessToken, String tokenType, long expiresIn, String sessionId, String userId) {}
     record Login(AccessSession access, String refresh, long maxAge) {}
@@ -20,10 +20,10 @@ public class SessionService implements BrowserSessions {
     private record Family(String userId, String id, String currentHash, Instant expiresAt, boolean revoked) {}
 
     private final JdbcTemplate db;
-    private final AccessTokens tokens;
+    private final IdentityAccessTokenService tokens;
     private final ApplicationEventPublisher events;
 
-    SessionService(JdbcTemplate db, AccessTokens tokens, ApplicationEventPublisher events) {
+    SessionService(JdbcTemplate db, IdentityAccessTokenService tokens, ApplicationEventPublisher events) {
         this.db = db;
         this.tokens = tokens;
         this.events = events;
@@ -31,9 +31,9 @@ public class SessionService implements BrowserSessions {
 
     @Transactional
     public Login start(String userId, String label) {
-        String id = Secrets.id();
-        String refresh = Secrets.token();
-        String hash = Secrets.hash(refresh);
+        String id = IdentitySecrets.id();
+        String refresh = IdentitySecrets.token();
+        String hash = IdentitySecrets.hash(refresh);
         Instant until = Instant.now().plus(LIFETIME);
         db.update("INSERT INTO auth_sessions(id,user_id,refresh_hash,device_label,expires_at) VALUES (?,?,?,?,?)",
                 id, userId, hash, label, Timestamp.from(until));
@@ -43,7 +43,7 @@ public class SessionService implements BrowserSessions {
 
     private Login response(String userId, String id, String refresh, Instant expires) {
         String jwt = tokens.issue(new AuthenticatedPrincipal(userId, id));
-        return new Login(new AccessSession(jwt, "Bearer", AccessTokens.LIFETIME.toSeconds(), id, userId),
+        return new Login(new AccessSession(jwt, "Bearer", IdentityAccessTokenService.LIFETIME.toSeconds(), id, userId),
                 refresh, Math.max(1, Duration.between(Instant.now(), expires).toSeconds()));
     }
 
@@ -53,7 +53,7 @@ public class SessionService implements BrowserSessions {
 
     private Family family(String raw, boolean revokeOnReplay) {
         if (raw == null || !raw.matches("[A-Za-z0-9_-]{43}")) throw new DomainException(AUTH_UNAUTHORIZED);
-        String hash = Secrets.hash(raw);
+        String hash = IdentitySecrets.hash(raw);
         String id = db.query("SELECT session_id FROM auth_refresh_history WHERE token_hash=?",
                 (rs,i) -> rs.getString(1), hash).stream().findFirst().orElseThrow(() -> new DomainException(AUTH_UNAUTHORIZED));
         var family = db.queryForObject("""
@@ -78,8 +78,8 @@ public class SessionService implements BrowserSessions {
     @Transactional(noRollbackFor = DomainException.class)
     public Login rotate(String raw) {
         var family = family(raw, true);
-        String refresh = Secrets.token();
-        String hash = Secrets.hash(refresh);
+        String refresh = IdentitySecrets.token();
+        String hash = IdentitySecrets.hash(refresh);
         recordToken(hash, family.id());
         db.update("UPDATE auth_sessions SET refresh_hash=?,last_used_at=CURRENT_TIMESTAMP(6) WHERE id=?", hash, family.id());
         return response(family.userId(), family.id(), refresh, family.expiresAt());

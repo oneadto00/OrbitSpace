@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { queryClient, spacesKey } from "../../shared/api/access";
-import { Button, Field, Loading, Modal } from "../../shared/ui/components";
+import { Button, Field, Loading, Modal } from "../../shared/ui/UiComponents";
 import {
   buildCliQuickstart,
   copyToClipboard,

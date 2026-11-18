@@ -10,8 +10,8 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.HexFormat;
 
-final class PlatformValues {
-    private PlatformValues() {}
+final class PlatformValueSupport {
+    private PlatformValueSupport() {}
 
     static MessageDigest sha256() {
         try {

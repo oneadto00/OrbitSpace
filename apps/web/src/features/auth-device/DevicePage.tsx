@@ -6,7 +6,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api, jsonBody } from "../../shared/api/httpClient";
 import { spacesKey, spaceKey } from "../../shared/api/access";
 import { canUploadOrManage } from "../../shared/auth/session";
-import { Button, Failure, Field, Loading } from "../../shared/ui/components";
+import { Button, Failure, Field, Loading } from "../../shared/ui/UiComponents";
 import { dateText, scopeNames } from "./display";
 
 type PendingDevice = IdentitySpaceOperations["getPendingDeviceRequest"]["responses"][200]["content"]["application/json"];

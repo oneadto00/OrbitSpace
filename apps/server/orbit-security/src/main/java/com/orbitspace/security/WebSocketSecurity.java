@@ -24,7 +24,7 @@ public class WebSocketSecurity implements HandshakeInterceptor, MembershipRevoca
     private static final int MAX_FRAME_BYTES = 64 * 1024;
     private static final Duration TTL = Duration.ofSeconds(30);
     private final AtomicTokenStorePort tokens;
-    private final ObjectProvider<BrowserSessions> sessions;
+    private final ObjectProvider<BrowserSessionPort> sessions;
     private final ObjectProvider<SpaceRoomPort> rooms;
     private final SpaceAccess access;
     private final RateLimitPort limits;
@@ -33,7 +33,7 @@ public class WebSocketSecurity implements HandshakeInterceptor, MembershipRevoca
     private record Connection(AtomicTokenStorePort.TicketGrant grant, WebSocketSession writer, WebSocketSession handlerSession) {}
     private final Map<WebSocketSession, Connection> active = new ConcurrentHashMap<>();
 
-    public WebSocketSecurity(AtomicTokenStorePort tokens, ObjectProvider<BrowserSessions> sessions,
+    public WebSocketSecurity(AtomicTokenStorePort tokens, ObjectProvider<BrowserSessionPort> sessions,
             ObjectProvider<SpaceRoomPort> rooms, SpaceAccess access, RateLimitPort limits, ObjectMapper json,
             @Value("${orbit.public-origin}") String origin) {
         this.json = json;

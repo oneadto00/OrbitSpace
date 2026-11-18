@@ -71,7 +71,7 @@ public class RedisSecurityStore implements RateLimitPort, AtomicTokenStorePort {
         long wait =
                 redis.execute(
                         ACQUIRE,
-                        List.of("orbit:rate:" + PlatformValues.digest(key)),
+                        List.of("orbit:rate:" + PlatformValueSupport.digest(key)),
                         Long.toString(window.toMillis()),
                         Integer.toString(limit),
                         UUID.randomUUID().toString());
@@ -89,12 +89,12 @@ public class RedisSecurityStore implements RateLimitPort, AtomicTokenStorePort {
         byte[] bytes = new byte[32];
         random.nextBytes(bytes);
         String ticket = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-        String key = "orbit:ticket:" + PlatformValues.digest(ticket);
+        String key = "orbit:ticket:" + PlatformValueSupport.digest(ticket);
         if (!Boolean.TRUE.equals(
                 redis.opsForValue()
                         .setIfAbsent(
                                 key,
-                                PlatformValues.json(mapper, grant),
+                                PlatformValueSupport.json(mapper, grant),
                                 Duration.ofMillis(boundedTtl(ttl, 120_000)))))
             throw new IllegalStateException("Cannot issue ticket");
         return ticket;
@@ -104,15 +104,15 @@ public class RedisSecurityStore implements RateLimitPort, AtomicTokenStorePort {
     public Optional<TicketGrant> consumeTicket(String ticket) {
         if (ticket == null || !ticket.matches("[A-Za-z0-9_-]{43}")) return Optional.empty();
         String grant =
-                redis.opsForValue().getAndDelete("orbit:ticket:" + PlatformValues.digest(ticket));
+                redis.opsForValue().getAndDelete("orbit:ticket:" + PlatformValueSupport.digest(ticket));
         return Optional.ofNullable(grant)
-                .map(s -> PlatformValues.decode(mapper, s, TicketGrant.class));
+                .map(s -> PlatformValueSupport.decode(mapper, s, TicketGrant.class));
     }
 
     private static List<String> memberKeys(String spaceId, String userId) {
         String tag =
                 "orbit:member:{"
-                        + PlatformValues.digest(spaceId.length() + ":" + spaceId + userId)
+                        + PlatformValueSupport.digest(spaceId.length() + ":" + spaceId + userId)
                         + "}";
         return List.of(tag + ":version", tag + ":data");
     }
@@ -122,7 +122,7 @@ public class RedisSecurityStore implements RateLimitPort, AtomicTokenStorePort {
             String spaceId, String userId, long epoch, long currentPermVersion) {
         String data = redis.opsForValue().get(memberKeys(spaceId, userId).get(1));
         return Optional.ofNullable(data)
-                .map(s -> PlatformValues.decode(mapper, s, Membership.class))
+                .map(s -> PlatformValueSupport.decode(mapper, s, Membership.class))
                 .filter(
                         m ->
                                 m.spaceId().equals(spaceId)
@@ -147,7 +147,7 @@ public class RedisSecurityStore implements RateLimitPort, AtomicTokenStorePort {
                 CACHE,
                 memberKeys(membership.spaceId(), membership.userId()),
                 version(membership.permVersion()),
-                PlatformValues.json(mapper, membership),
+                PlatformValueSupport.json(mapper, membership),
                 Long.toString(boundedTtl(ttl, 30_000)));
     }
 

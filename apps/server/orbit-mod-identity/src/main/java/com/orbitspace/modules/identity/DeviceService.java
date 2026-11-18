@@ -1,4 +1,4 @@
-package com.orbitspace.identity;
+package com.orbitspace.modules.identity;
 
 import static com.orbitspace.kernel.KernelErrorCode.*;
 import com.orbitspace.kernel.*;
@@ -56,14 +56,14 @@ public class DeviceService implements MembershipRevocationHook {
     @Transactional
     public Authorization request(String label, String scope) {
         String requested = String.join(" ", scopes(scope));
-        String high = Secrets.token();
-        String shortCode = Secrets.userCode();
+        String high = IdentitySecrets.token();
+        String shortCode = IdentitySecrets.userCode();
         Instant now = Instant.now();
         db.update("""
                 INSERT INTO device_authorization_requests
                 (device_code_hash,user_code,device_label,requested_scopes,interval_seconds,next_poll_at,expires_at)
                 VALUES (?,?,?,?,?,?,?)
-                """, Secrets.hash(high),shortCode,label,requested,INTERVAL,Timestamp.from(now.plusSeconds(INTERVAL)),
+                """, IdentitySecrets.hash(high),shortCode,label,requested,INTERVAL,Timestamp.from(now.plusSeconds(INTERVAL)),
                 Timestamp.from(now.plus(REQUEST_TTL)));
         return new Authorization(high,shortCode,origin + "/device",INTERVAL,REQUEST_TTL.toSeconds());
     }
@@ -122,7 +122,7 @@ public class DeviceService implements MembershipRevocationHook {
     public Poll poll(String client, String type, String high) {
         if (!CLIENT.equals(client) || !GRANT_TYPE.equals(type)) return Poll.failed(INVALID_REQUEST);
         if (high == null || !high.matches("[A-Za-z0-9_-]{43}")) return Poll.failed(AUTH_UNAUTHORIZED);
-        String hash = Secrets.hash(high);
+        String hash = IdentitySecrets.hash(high);
         var observed = db.query("SELECT * FROM device_authorization_requests WHERE device_code_hash=?",
                 this::requestRow, hash).stream().findFirst().orElse(null);
         if (observed == null) return Poll.failed(AUTH_UNAUTHORIZED);
@@ -143,15 +143,15 @@ public class DeviceService implements MembershipRevocationHook {
         // If approval arrived during this poll, check that grant on the next poll in the correct lock order.
         if (!eligible || request.status.equals("PENDING")) return Poll.failed(DEVICE_AUTH_PENDING);
 
-        String device = Secrets.id();
-        String credential = Secrets.id();
-        String secret = "od_" + Secrets.token();
+        String device = IdentitySecrets.id();
+        String credential = IdentitySecrets.id();
+        String secret = "od_" + IdentitySecrets.token();
         Instant expires = now.plus(GRANT_TTL);
         db.update("INSERT INTO devices(id,user_id,label) VALUES (?,?,?)",device,request.user,request.label);
         db.update("""
                 INSERT INTO device_credentials(id,token_hash,device_id,user_id,space_id,project_id,membership_epoch,scopes,expires_at)
                 VALUES (?,?,?,?,?,?,?,?,?)
-                """,credential,Secrets.hash(secret),device,request.user,request.space,request.project,request.epoch,
+                """,credential,IdentitySecrets.hash(secret),device,request.user,request.space,request.project,request.epoch,
                 request.scopes,Timestamp.from(expires));
         db.update("UPDATE device_authorization_requests SET status='CONSUMED' WHERE device_code_hash=?",request.hash);
         var grant = new Grant(credential,request.user,device,request.label,request.space,request.project,request.epoch,
@@ -164,7 +164,7 @@ public class DeviceService implements MembershipRevocationHook {
         db.update("""
                 UPDATE device_authorization_requests SET status='DENIED'
                 WHERE device_code_hash=? AND status='APPROVED'
-                """, Secrets.hash(high));
+                """, IdentitySecrets.hash(high));
     }
 
     private Grant grant(ResultSet rs, int i) throws SQLException {
@@ -175,7 +175,7 @@ public class DeviceService implements MembershipRevocationHook {
     public DevicePrincipal authenticate(String raw) {
         if (raw == null || !raw.matches("od_[A-Za-z0-9_-]{43}")) throw new DomainException(AUTH_UNAUTHORIZED);
         var grant = db.query(GRANTS + " WHERE c.token_hash=? AND c.status='ACTIVE' AND c.expires_at>CURRENT_TIMESTAMP(6)",
-                this::grant,Secrets.hash(raw)).stream().findFirst().orElseThrow(() -> new DomainException(AUTH_REVOKED));
+                this::grant,IdentitySecrets.hash(raw)).stream().findFirst().orElseThrow(() -> new DomainException(AUTH_REVOKED));
         access.member(grant.userId, grant.spaceId, grant.membershipEpoch,SpaceRole.MEMBER);
         access.project(grant.spaceId, grant.projectId);
         return new DevicePrincipal(grant.userId,grant.deviceId,grant.spaceId,grant.projectId,grant.scopes,grant.membershipEpoch);
@@ -194,7 +194,7 @@ public class DeviceService implements MembershipRevocationHook {
                 UPDATE device_credentials SET status='REVOKED',revoked_at=CURRENT_TIMESTAMP(6)
                 WHERE id=? AND status='ACTIVE'
                 """,credential);
-        if (changed == 1) ledger.append(new RevocationLedgerPort.Revocation(Secrets.id(),RevocationLedgerPort.Target.DEVICE_CREDENTIAL,
+        if (changed == 1) ledger.append(new RevocationLedgerPort.Revocation(IdentitySecrets.id(),RevocationLedgerPort.Target.DEVICE_CREDENTIAL,
                 grant.spaceId,credential,grant.membershipEpoch,Instant.now()));
     }
 

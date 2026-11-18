@@ -16,13 +16,13 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 final class CredentialFilter extends OncePerRequestFilter {
-    private final List<SecurityConfig.Rule> rules;
+    private final List<SecurityAutoConfiguration.Rule> rules;
     private final ObjectProvider<CredentialAuthenticationPort> credentials;
-    private final ObjectProvider<BrowserSessions> sessions;
+    private final ObjectProvider<BrowserSessionPort> sessions;
     private final HandlerExceptionResolver errors;
 
-    CredentialFilter(List<SecurityConfig.Rule> rules, ObjectProvider<CredentialAuthenticationPort> credentials,
-            ObjectProvider<BrowserSessions> sessions, HandlerExceptionResolver errors) {
+    CredentialFilter(List<SecurityAutoConfiguration.Rule> rules, ObjectProvider<CredentialAuthenticationPort> credentials,
+            ObjectProvider<BrowserSessionPort> sessions, HandlerExceptionResolver errors) {
         this.rules = rules;
         this.credentials = credentials;
         this.sessions = sessions;
@@ -38,7 +38,7 @@ final class CredentialFilter extends OncePerRequestFilter {
                 Principal principal = switch (rule.route().access()) {
                     case ACCOUNT -> credentials.getObject().authenticateAccount(bearer(req));
                     case DEVICE -> credentials.getObject().authenticateDevice(bearer(req));
-                    case REFRESH_COOKIE -> sessions.getObject().fromRefresh(RefreshCsrfTokens.cookie(req),
+                    case REFRESH_COOKIE -> sessions.getObject().fromRefresh(RefreshCsrfTokenRepository.cookie(req),
                             rule.route().pathPattern().equals("/api/v1/auth/refresh"));
                     case PUBLIC -> throw new IllegalStateException();
                 };

@@ -27,7 +27,7 @@ import {
 } from "../shared/api/access";
 import { logout } from "../shared/api/httpClient";
 import { canManageSpace, canUploadOrManage, useAuth } from "../shared/auth/session";
-import { Brand, Button, Field, Loading, ResourceStateCard } from "../shared/ui/components";
+import { Brand, Button, Field, Loading, ResourceStateCard } from "../shared/ui/UiComponents";
 import { ChatPane, type ChatDraftQuote } from "../features/chat/ChatPane";
 import { GitWorkspaceView } from "../features/git-canvas/GitWorkspaceView";
 import { SpaceSettingsPanel } from "../features/space/SpaceSettingsPanel";

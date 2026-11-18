@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 public class JobRunner implements AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(JobRunner.class);
     private final ObjectProvider<AsyncJobProcessor> processors;
-    private final JdbcJobs jobs;
+    private final JdbcJobStore jobs;
     private final StringRedisTemplate redis;
     private final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
     private final Semaphore capacity = new Semaphore(4);
@@ -33,7 +33,7 @@ public class JobRunner implements AutoCloseable {
 
     public JobRunner(
             ObjectProvider<AsyncJobProcessor> processors,
-            JdbcJobs jobs,
+            JdbcJobStore jobs,
             StringRedisTemplate redis) {
         this.processors = processors;
         this.jobs = jobs;

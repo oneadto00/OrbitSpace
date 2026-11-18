@@ -23,12 +23,12 @@ import {
 } from "../../shared/api/access";
 import { api } from "../../shared/api/httpClient";
 import type { GitWorkspaceSlotProps } from "../../shared/contracts/gitWorkspaceContract";
-import { Button, Loading, ResourceStateCard } from "../../shared/ui/components";
+import { Button, Loading, ResourceStateCard } from "../../shared/ui/UiComponents";
 import {
   fetchProjectGraph,
   gitCanvasErrorText,
   resolveResourceCardState,
-} from "./api/gitCanvasApi";
+} from "./gitCanvasApi";
 import { DagSvgCanvas } from "./canvas/DagSvgCanvas";
 import { NodeDetailDrawer } from "./drawer/NodeDetailDrawer";
 import { shortOid } from "./labels";
@@ -39,7 +39,7 @@ import {
   type DagLayoutResult,
 } from "./worker/dagLayoutCore";
 import type { DagWorkerResponse } from "./worker/dagLayout.worker";
-import "./gitCanvas.css";
+import "./git-canvas.css";
 
 function mergeProjectGraphs(pages: ProjectGraph[], projectId: string): ProjectGraph {
   const commitMap = new Map<string, CommitNode>();

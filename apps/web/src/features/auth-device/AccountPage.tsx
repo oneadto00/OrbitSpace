@@ -4,7 +4,7 @@ import type { DeviceGrant, LoginSession } from "@orbitspace/shared-types";
 import { Laptop, Terminal } from "lucide-react";
 import { api, jsonBody, logout } from "../../shared/api/httpClient";
 import { dateText, scopeNames } from "./display";
-import { Button, Failure, Field, Loading, Modal } from "../../shared/ui/components";
+import { Button, Failure, Field, Loading, Modal } from "../../shared/ui/UiComponents";
 
 type Profile = { userId: string; displayName: string; email: string; emailVerified: boolean };
 

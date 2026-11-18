@@ -26,12 +26,12 @@ import jakarta.servlet.http.HttpServletRequest;
 
 @AutoConfiguration(beforeName = "com.orbitspace.app.config.FoundationSecurityAutoConfiguration")
 @Import({SpaceAccess.class, SpaceRoleAspect.class, WebSocketSecurity.class})
-public class SecurityConfig {
+public class SecurityAutoConfiguration {
     record Rule(RequestMatcher matcher, ModuleSecurityCustomizer.Route route) {}
 
     @Bean
     SecurityFilterChain applicationSecurity(HttpSecurity http, List<ModuleSecurityCustomizer> modules,
-            ObjectProvider<CredentialAuthenticationPort> credentials, ObjectProvider<BrowserSessions> sessions,
+            ObjectProvider<CredentialAuthenticationPort> credentials, ObjectProvider<BrowserSessionPort> sessions,
             AuthenticationEntryPoint entryPoint, AccessDeniedHandler denied,
             @Qualifier("handlerExceptionResolver") HandlerExceptionResolver errors) throws Exception {
         var paths = PathPatternRequestMatcher.withDefaults();
@@ -48,7 +48,7 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .requestCache(c -> c.disable()).logout(c -> c.disable())
                 .formLogin(c -> c.disable()).httpBasic(c -> c.disable())
-                .csrf(csrf -> csrf.csrfTokenRepository(new RefreshCsrfTokens()).csrfTokenRequestHandler(headersOnly)
+                .csrf(csrf -> csrf.csrfTokenRepository(new RefreshCsrfTokenRepository()).csrfTokenRequestHandler(headersOnly)
                         .requireCsrfProtectionMatcher(req -> !Set.of("GET","HEAD","OPTIONS","TRACE").contains(req.getMethod())
                                 && rules.stream().anyMatch(rule -> rule.matcher.matches(req) && !rule.route.csrfExempt())))
                 .authorizeHttpRequests(auth -> {

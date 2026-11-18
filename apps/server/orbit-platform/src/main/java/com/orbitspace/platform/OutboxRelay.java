@@ -44,7 +44,7 @@ public class OutboxRelay implements OutboxPublisherPort {
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void publish(Event event) {
-        String digest = PlatformValues.digest(PlatformValues.json(mapper, event));
+        String digest = PlatformValueSupport.digest(PlatformValueSupport.json(mapper, event));
         db.update(
                 """
                 INSERT INTO outbox_events(event_id,aggregate_type,aggregate_id,event_type,payload,input_digest,created_at)
@@ -56,7 +56,7 @@ public class OutboxRelay implements OutboxPublisherPort {
                 event.type(),
                 event.payloadJson(),
                 digest,
-                PlatformValues.time(event.occurredAt()));
+                PlatformValueSupport.time(event.occurredAt()));
         String stored =
                 db.queryForObject(
                         "SELECT input_digest FROM outbox_events WHERE event_id=? FOR UPDATE",
@@ -122,7 +122,7 @@ public class OutboxRelay implements OutboxPublisherPort {
                             Map.of("jobId", event.aggregateId(), "eventId", event.eventId()));
             redis.opsForStream().trim(JOB_STREAM, 10000, true);
         } else {
-            redis.convertAndSend("orbit:events", PlatformValues.json(mapper, event));
+            redis.convertAndSend("orbit:events", PlatformValueSupport.json(mapper, event));
         }
         db.update("UPDATE outbox_events SET status='PUBLISHED' WHERE event_id=?", id);
     }

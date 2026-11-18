@@ -19,12 +19,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
-public class JdbcJobs implements AsyncJobPort {
+public class JdbcJobStore implements AsyncJobPort {
     private final JdbcTemplate db;
     private final OutboxPublisherPort outbox;
     private static final int MAX_ATTEMPTS = 8;
 
-    public JdbcJobs(JdbcTemplate db, OutboxPublisherPort outbox) {
+    public JdbcJobStore(JdbcTemplate db, OutboxPublisherPort outbox) {
         this.db = db;
         this.outbox = outbox;
     }
@@ -105,7 +105,7 @@ public class JdbcJobs implements AsyncJobPort {
                                     java.sql.Timestamp.class,
                                     job.jobId())
                             .toInstant();
-            String eventId = "job-" + PlatformValues.digest(job.jobId());
+            String eventId = "job-" + PlatformValueSupport.digest(job.jobId());
             outbox.publish(
                     new OutboxPublisherPort.Event(
                             eventId,
@@ -217,7 +217,7 @@ public class JdbcJobs implements AsyncJobPort {
                 """,
                 retryable ? "RETRY_WAIT" : "FAILED",
                 summary,
-                PlatformValues.time(next),
+                PlatformValueSupport.time(next),
                 id);
         if (!retryable) unpinInput(id);
         return true;

@@ -25,7 +25,7 @@ import { JoinSpacePage } from "../features/space/JoinSpacePage";
 import { SpaceHomePage } from "../features/space/SpaceHomePage";
 import { logout, refreshSession } from "../shared/api/httpClient";
 import { useAuth } from "../shared/auth/session";
-import { Brand, Button, Failure, Loading } from "../shared/ui/components";
+import { Brand, Button, Failure, Loading } from "../shared/ui/UiComponents";
 import { SpaceWorkbenchPage } from "./SpaceWorkbenchPage";
 import "./workbench.css";
 

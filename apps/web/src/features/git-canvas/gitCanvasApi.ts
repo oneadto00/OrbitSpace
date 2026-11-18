@@ -7,15 +7,15 @@ import type {
   ProjectGraph,
   SnapshotDetail,
 } from "@orbitspace/shared-types";
-import { revokeSpace, spaceSignal, type SpaceAccess } from "../../../shared/api/access";
+import { revokeSpace, spaceSignal, type SpaceAccess } from "../../shared/api/access";
 import {
   api,
   endSession,
   errorText,
   HttpError,
   refreshSession,
-} from "../../../shared/api/httpClient";
-import { useAuth } from "../../../shared/auth/session";
+} from "../../shared/api/httpClient";
+import { useAuth } from "../../shared/auth/session";
 
 const API_BASE = "/api/v1";
 

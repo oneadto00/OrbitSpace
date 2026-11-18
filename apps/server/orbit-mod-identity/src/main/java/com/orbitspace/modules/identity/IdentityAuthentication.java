@@ -1,13 +1,13 @@
-package com.orbitspace.identity;
+package com.orbitspace.modules.identity;
 
 import com.orbitspace.kernel.*;
 
 final class IdentityAuthentication implements CredentialAuthenticationPort {
-    private final AccessTokens tokens;
+    private final IdentityAccessTokenService tokens;
     private final SessionService sessions;
     private final DeviceService devices;
 
-    IdentityAuthentication(AccessTokens tokens, SessionService sessions, DeviceService devices) {
+    IdentityAuthentication(IdentityAccessTokenService tokens, SessionService sessions, DeviceService devices) {
         this.tokens = tokens;
         this.sessions = sessions;
         this.devices = devices;

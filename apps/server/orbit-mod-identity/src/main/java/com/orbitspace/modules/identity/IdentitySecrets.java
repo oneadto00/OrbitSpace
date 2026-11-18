@@ -1,4 +1,4 @@
-package com.orbitspace.identity;
+package com.orbitspace.modules.identity;
 
 import static com.orbitspace.kernel.KernelErrorCode.INVALID_REQUEST;
 import com.orbitspace.kernel.DomainException;
@@ -10,7 +10,7 @@ import java.util.Base64;
 import java.util.HexFormat;
 import java.util.UUID;
 
-final class Secrets {
+final class IdentitySecrets {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final String CODE_ALPHABET = "BCDFGHJKLMNPQRSTVWXYZ23456789";
     static String id() { return UUID.randomUUID().toString(); }

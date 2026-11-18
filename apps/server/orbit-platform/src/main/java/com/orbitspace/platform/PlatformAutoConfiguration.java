@@ -33,7 +33,7 @@ import java.time.Duration;
 @AutoConfiguration
 @EnableScheduling
 @EnableTransactionManagement(proxyTargetClass = true)
-public class PlatformConfiguration {
+public class PlatformAutoConfiguration {
     private static S3Client client(
             URI endpoint, String accessKey, String secretKey, String region) {
         return S3Client.builder()
@@ -94,14 +94,14 @@ public class PlatformConfiguration {
     }
 
     @Bean
-    JdbcJobs asyncJobs(JdbcTemplate db, OutboxPublisherPort outbox) {
-        return new JdbcJobs(db, outbox);
+    JdbcJobStore asyncJobs(JdbcTemplate db, OutboxPublisherPort outbox) {
+        return new JdbcJobStore(db, outbox);
     }
 
     @Bean
     JobRunner jobRunner(
             ObjectProvider<AsyncJobProcessor> processors,
-            JdbcJobs jobs,
+            JdbcJobStore jobs,
             StringRedisTemplate redis) {
         return new JobRunner(processors, jobs, redis);
     }
@@ -165,7 +165,7 @@ public class PlatformConfiguration {
                     auditCode(e.action()),
                     safeId(e.resourceId()),
                     auditCode(e.outcome()),
-                    PlatformValues.time(e.occurredAt()));
+                    PlatformValueSupport.time(e.occurredAt()));
         }
 
         private static String safeId(String id) {
@@ -174,7 +174,7 @@ public class PlatformConfiguration {
             // pseudonymized.
             if (id.matches("(?i)[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}")
                     || id.matches("[0-9]{1,20}")) return id;
-            return "sha256-" + PlatformValues.digest(id);
+            return "sha256-" + PlatformValueSupport.digest(id);
         }
 
         private static String auditCode(String code) {

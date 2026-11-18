@@ -79,7 +79,7 @@ public class RecoveryLedger implements RevocationLedgerPort {
 
     private Remote head() {
         var bytes = s3.getObjectAsBytes(b -> b.bucket(bucket).key(prefix + "head"));
-        Head head = PlatformValues.decode(mapper, bytes.asUtf8String(), Head.class);
+        Head head = PlatformValueSupport.decode(mapper, bytes.asUtf8String(), Head.class);
         if (head.sequence() < 0 || !head.digest().matches("[0-9a-f]{64}")) throw unavailable();
         return new Remote(head, bytes.response().eTag());
     }
@@ -102,16 +102,16 @@ public class RecoveryLedger implements RevocationLedgerPort {
             s3.createBucket(b -> b.bucket(bucket));
         }
         createOnce(
-                prefix + "head", PlatformValues.json(mapper, new Head(state.ledgerId, 0, GENESIS)));
+                prefix + "head", PlatformValueSupport.json(mapper, new Head(state.ledgerId, 0, GENESIS)));
     }
 
     private Encoded entry(long sequence) {
         var bytes = s3.getObjectAsBytes(b -> b.bucket(bucket).key(key(sequence))).asByteArray();
         Record rec =
-                PlatformValues.decode(
+                PlatformValueSupport.decode(
                         mapper, new String(bytes, StandardCharsets.UTF_8), Record.class);
         if (rec.sequence() != sequence) throw unavailable();
-        return new Encoded(rec, PlatformValues.digest(bytes));
+        return new Encoded(rec, PlatformValueSupport.digest(bytes));
     }
 
     private Remote advance(Remote previous, Encoded next) {
@@ -123,7 +123,7 @@ public class RecoveryLedger implements RevocationLedgerPort {
         var response =
                 s3.putObject(
                         b -> b.bucket(bucket).key(prefix + "head").ifMatch(previous.etag),
-                        RequestBody.fromString(PlatformValues.json(mapper, updated)));
+                        RequestBody.fromString(PlatformValueSupport.json(mapper, updated)));
         return new Remote(updated, response.eTag());
     }
 
@@ -181,7 +181,7 @@ public class RecoveryLedger implements RevocationLedgerPort {
                         r.spaceId(),
                         r.targetId(),
                         r.version(),
-                        PlatformValues.time(r.effectiveAt()),
+                        PlatformValueSupport.time(r.effectiveAt()),
                         entry.digest));
     }
 
@@ -209,7 +209,7 @@ public class RecoveryLedger implements RevocationLedgerPort {
                 r.spaceId(),
                 r.targetId(),
                 r.version(),
-                PlatformValues.time(r.effectiveAt()),
+                PlatformValueSupport.time(r.effectiveAt()),
                 entry.digest);
         db.update(
                 "UPDATE revocation_ledger_state SET initialized=TRUE,applied_sequence=? WHERE id=1",
@@ -250,11 +250,11 @@ public class RecoveryLedger implements RevocationLedgerPort {
             return previous.value.sequence;
         }
         Record value = new Record(state.ledgerId, remote.head.sequence + 1, remote.head.digest, r);
-        String serialized = PlatformValues.json(mapper, value);
+        String serialized = PlatformValueSupport.json(mapper, value);
         // Exercise all SQL constraints before irrevocably extending the independent authority.
         // This projection becomes visible only when the caller commits after successful
         // publication.
-        Encoded proposed = new Encoded(value, PlatformValues.digest(serialized));
+        Encoded proposed = new Encoded(value, PlatformValueSupport.digest(serialized));
         mirror(proposed);
         createOnce(key(value.sequence), serialized);
         Encoded stored = entry(value.sequence);

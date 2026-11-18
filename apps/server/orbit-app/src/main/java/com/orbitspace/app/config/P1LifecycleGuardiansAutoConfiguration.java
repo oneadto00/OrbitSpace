@@ -40,16 +40,16 @@ import java.util.function.Consumer;
  * completes replay before the startup gate certifies all replay beans and the ledger high-water mark.
  */
 @AutoConfiguration(afterName = {
-    "com.orbitspace.platform.PlatformConfiguration",
-    "com.orbitspace.identity.IdentityConfiguration",
+    "com.orbitspace.platform.PlatformAutoConfiguration",
+    "com.orbitspace.modules.identity.IdentityAutoConfiguration",
     "com.orbitspace.modules.space.SpaceAutoConfiguration",
     "com.orbitspace.modules.gitproject.GitProjectAutoConfiguration",
     "com.orbitspace.modules.chat.ChatAutoConfiguration"
 })
 @AutoConfigureOrder(Ordered.LOWEST_PRECEDENCE)
 @EnableScheduling
-public class P1LifecycleGuardiansConfiguration {
-    private static final Logger log = LoggerFactory.getLogger(P1LifecycleGuardiansConfiguration.class);
+public class P1LifecycleGuardiansAutoConfiguration {
+    private static final Logger log = LoggerFactory.getLogger(P1LifecycleGuardiansAutoConfiguration.class);
     private static final String REPLAY_BEAN_PREFIX = "orbitReplay";
 
     /**

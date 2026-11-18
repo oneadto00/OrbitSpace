@@ -1,1 +1,1 @@
-com.orbitspace.identity.IdentityConfiguration
+com.orbitspace.modules.identity.IdentityAutoConfiguration

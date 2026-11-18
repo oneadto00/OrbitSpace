@@ -12,7 +12,7 @@ import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.security.web.csrf.DefaultCsrfToken;
 
-public final class RefreshCsrfTokens implements CsrfTokenRepository {
+public final class RefreshCsrfTokenRepository implements CsrfTokenRepository {
     public static final String COOKIE = "orbit_refresh";
     public static final String HEADER = "X-CSRF-Token";
 
