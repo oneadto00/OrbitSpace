@@ -21,6 +21,8 @@ components:
     BaseKind: {$ref: ../common.schema.json#/$defs/BaseKind}
     DiscussionStatus: {$ref: ../common.schema.json#/$defs/DiscussionStatus}
     P1MessageKind: {$ref: ../common.schema.json#/$defs/P1MessageKind}
+    GrantType: {$ref: ../common.schema.json#/$defs/GrantType}
+    P2MessageKind: {$ref: ../common.schema.json#/$defs/P2MessageKind}
     DeviceScope: {$ref: ../common.schema.json#/$defs/DeviceScope}
     CardState: {$ref: ../common.schema.json#/$defs/CardState}
     ApiError: {$ref: ../common.schema.json#/$defs/ApiError}

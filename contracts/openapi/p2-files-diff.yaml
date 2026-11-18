@@ -1,0 +1,1912 @@
+openapi: 3.1.1
+info:
+  title: OrbitSpace P2 — Files, airdrop, controlled diff, code comments and internal worker gateway
+  version: 1.0.0
+  description: >
+    P2 endpoints covering basic friendship (discovery, space invitation, and independent airdrop only—no remarks
+    or online/busy status), chunked file upload with user-scoped-only instant match and pre-upload quota enforcement,
+    space file area, independent friend-to-friend airdrop with per-recipient download counts and immediate revocation,
+    authenticated streaming HTTP Range download sessions, CLI content backfill, honest five-state controlled two-point
+    diff, line-anchored code comments bound to unified main-room discussion threads, and HMAC-authenticated internal
+    async worker callbacks.
+security:
+  - AccessToken: []
+paths:
+  /api/v1/users/search:
+    get:
+      operationId: searchUsers
+      summary: Search users for friendship and space discovery
+      description: Rate-limited user lookup returning minimal non-sensitive identity fields and masked emails.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserSearchResponse'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '429': {$ref: ./common.yaml#/components/responses/RateLimited}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/friend-requests:
+    post:
+      operationId: sendFriendRequest
+      summary: Send a friend request to another user
+      description: Idempotent request creation preventing duplicate pending requests. Friendship never grants space access.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SendFriendRequestBody'}
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FriendRequestDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        '429': {$ref: ./common.yaml#/components/responses/RateLimited}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+    get:
+      operationId: listFriendRequests
+      summary: List incoming or outgoing friend requests
+      parameters:
+        - name: direction
+          in: query
+          required: false
+          schema: {$ref: '#/components/schemas/FriendRequestDirection'}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FriendRequestListResponse'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/friend-requests/{requestId}/accept:
+    parameters:
+      - name: requestId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    post:
+      operationId: acceptFriendRequest
+      summary: Accept a pending incoming friend request
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      responses:
+        '200':
+          description: Accepted.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FriendRequestDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/friend-requests/{requestId}/reject:
+    parameters:
+      - name: requestId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    post:
+      operationId: rejectFriendRequest
+      summary: Reject a pending incoming friend request
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      responses:
+        '200':
+          description: Rejected.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FriendRequestDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/friend-requests/{requestId}/cancel:
+    parameters:
+      - name: requestId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    post:
+      operationId: cancelFriendRequest
+      summary: Cancel a pending outgoing friend request
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      responses:
+        '200':
+          description: Cancelled.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FriendRequestDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/friends:
+    get:
+      operationId: listFriends
+      summary: List active friends without remarks or online/busy presence
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FriendListResponse'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/friends/{friendUserId}:
+    parameters:
+      - name: friendUserId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    delete:
+      operationId: removeFriend
+      summary: Unilaterally remove a friendship without altering existing space memberships
+      responses:
+        '204':
+          description: Removed.
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/files/upload-sessions:
+    post:
+      operationId: createUploadSession
+      summary: Initiate a quota-checked chunked upload session with user-scoped instant-match lookup
+      description: >
+        Pre-checks space quota (for SPACE_FILE, requiring X-Membership-Epoch and MEMBER+) or sender personal quota
+        (for AIRDROP_SHARE) and rejects insufficient quota with QUOTA_EXCEEDED without evicting valid shares.
+        Instant match checks strictly within files already held and authorized for the calling user; client-supplied
+        SHA-256 is never proof of ownership and never probes platform-wide files.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+        - {$ref: '#/components/parameters/OptionalMemberEpoch'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateUploadSessionRequest'}
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UploadSessionDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/files/upload-sessions/{uploadId}:
+    parameters:
+      - name: uploadId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    get:
+      operationId: getUploadSession
+      summary: Query upload session state and already uploaded part numbers for resume
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UploadSessionDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '410': {$ref: ./common.yaml#/components/responses/Gone}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/files/upload-sessions/{uploadId}/parts/{partNumber}:
+    parameters:
+      - name: uploadId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+      - name: partNumber
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+    put:
+      operationId: uploadFilePart
+      summary: Upload one file chunk idempotently with optional part SHA-256 verification
+      parameters:
+        - name: X-Part-Sha256
+          in: header
+          required: false
+          schema: {$ref: ../common.schema.json#/$defs/Sha256}
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Chunk accepted.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UploadPartAck'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        '410': {$ref: ./common.yaml#/components/responses/Gone}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/files/upload-sessions/{uploadId}/complete:
+    parameters:
+      - name: uploadId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    post:
+      operationId: completeUploadSession
+      summary: Idempotently verify, merge, and finalize an upload session into a file record
+      description: >
+        Verifies all part digests and final object SHA-256 before promoting to immutable object storage and creating
+        the logical file record. Retries with the same idempotency key return the original FileRecordDto.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CompleteUploadSessionRequest'}
+      responses:
+        '200':
+          description: Completed.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FileRecordDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        '410': {$ref: ./common.yaml#/components/responses/Gone}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/files:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    get:
+      operationId: listSpaceFiles
+      summary: List active files in the space file area along with space quota usage
+      description: Inherits space membership and role permissions (VIEWER+); does not apply per-recipient download limits.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SpaceFileListResponse'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+    post:
+      operationId: attachSpaceFile
+      summary: Attach a completed space-scoped upload to the space file area
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AttachSpaceFileRequest'}
+      responses:
+        '201':
+          description: Attached.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FileRecordDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        '410': {$ref: ./common.yaml#/components/responses/Gone}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/files/{fileId}:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+      - name: fileId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    delete:
+      operationId: deleteSpaceFile
+      summary: Delete a logical space file and revoke space-file access without disturbing independent grants
+      description: >
+        Marks the logical file deleted, revokes space-file download sessions, and triggers card state invalidation.
+        Underlying physical storage objects are never deleted while still referenced by any other valid resource.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+      responses:
+        '204':
+          description: Deleted.
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/airdrops:
+    post:
+      operationId: createAirdrop
+      summary: Create an independent file airdrop to one or more active friends
+      description: >
+        Verifies active friendship with every recipient (NOT_FRIENDS_FOR_AIRDROP otherwise). When re-sharing space
+        files via sourceSpaceId, validates live space membership epoch and export permission and creates independent
+        business share records counted toward sender quota. PERMANENT means no preset expiry, still constrained by
+        owner deletion, account status, and storage quota.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+        - {$ref: '#/components/parameters/OptionalMemberEpoch'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateAirdropRequest'}
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AirdropShareDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+    get:
+      operationId: listAirdrops
+      summary: List sent or received independent airdrops
+      parameters:
+        - name: role
+          in: query
+          required: false
+          schema: {$ref: '#/components/schemas/AirdropListRole'}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AirdropShareListResponse'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/airdrops/{shareId}:
+    parameters:
+      - name: shareId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    get:
+      operationId: getAirdrop
+      summary: Inspect an independent airdrop share (marks recipient state VIEWED when opened by recipient)
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AirdropShareDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '410': {$ref: ./common.yaml#/components/responses/Gone}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/airdrops/{shareId}/recipients/{recipientUserId}/revoke:
+    parameters:
+      - name: shareId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+      - name: recipientUserId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    post:
+      operationId: revokeAirdropRecipient
+      summary: Immediately revoke one recipient from an airdrop without affecting other recipients or grants
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      responses:
+        '200':
+          description: Revoked.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AirdropShareDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/airdrops/{shareId}/revoke:
+    parameters:
+      - name: shareId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    post:
+      operationId: revokeAirdrop
+      summary: Immediately revoke an entire airdrop share for all recipients without touching other independent grants
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      responses:
+        '200':
+          description: Revoked.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AirdropShareDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/download-sessions:
+    post:
+      operationId: createDownloadSession
+      summary: Atomically verify live grant and create a streaming Range-capable download session
+      description: >
+        Verifies live grant source (SPACE_FILE checks live space membership and epoch; AIRDROP_SHARE checks unrevoked
+        share, unrevoked recipient, expiry, and remaining download quota). For finite-limit airdrops, atomically
+        consumes 1 download slot upon session creation while allowing multiple HTTP Range retries within the same live
+        session until expiry or revocation.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+        - {$ref: '#/components/parameters/OptionalMemberEpoch'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateDownloadSessionRequest'}
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DownloadSessionDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        '410': {$ref: ./common.yaml#/components/responses/Gone}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/download-sessions/{downloadSessionId}/content:
+    parameters:
+      - name: downloadSessionId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    get:
+      operationId: downloadSessionContent
+      summary: Stream authorized file bytes with HTTP Range support and live revocation enforcement
+      description: >
+        Authenticated streaming proxy. Rechecks grant validity and membership/share revocation on every request;
+        revocation immediately blocks new Range requests on existing sessions.
+      parameters:
+        - {$ref: '#/components/parameters/OptionalMemberEpoch'}
+        - name: Range
+          in: header
+          required: false
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Full content stream.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          headers:
+            Cache-Control:
+              schema: {const: no-store}
+            Accept-Ranges:
+              schema: {const: bytes}
+            Content-Length:
+              schema: {$ref: ../common.schema.json#/$defs/Sequence}
+        '206':
+          description: Partial content stream for requested byte range.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          headers:
+            Cache-Control:
+              schema: {const: no-store}
+            Accept-Ranges:
+              schema: {const: bytes}
+            Content-Range:
+              schema: {type: string}
+            Content-Length:
+              schema: {$ref: ../common.schema.json#/$defs/Sequence}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '410': {$ref: ./common.yaml#/components/responses/Gone}
+        '416': {$ref: ./common.yaml#/components/responses/Error}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/cli/projects/{projectId}/backfill/check:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    post:
+      operationId: checkBackfill
+      summary: Check missing or unshared file contents needed for a two-point diff
+      security:
+        - DeviceToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BackfillCheckRequest'}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BackfillCheckResponse'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/cli/projects/{projectId}/backfill/sessions:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    post:
+      operationId: createBackfillSession
+      summary: Open a controlled backfill session for a frozen approved manifest
+      security:
+        - DeviceToken: []
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateBackfillSessionRequest'}
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BackfillSessionDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/cli/projects/{projectId}/backfill/sessions/{backfillId}/objects:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+      - name: backfillId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    put:
+      operationId: uploadBackfillObjects
+      summary: Upload staged backfill object payload verified by SHA-256
+      security:
+        - DeviceToken: []
+      parameters:
+        - name: X-Backfill-Sha256
+          in: header
+          required: true
+          schema: {$ref: ../common.schema.json#/$defs/Sha256}
+        - name: path
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '204':
+          description: Stored.
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        '410': {$ref: ./common.yaml#/components/responses/Gone}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/cli/projects/{projectId}/backfill/sessions/{backfillId}/complete:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+      - name: backfillId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    post:
+      operationId: completeBackfillSession
+      summary: Idempotently finalize a backfill session and promote verified objects
+      security:
+        - DeviceToken: []
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CompleteBackfillRequest'}
+      responses:
+        '200':
+          description: Completed.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BackfillReceiptDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        '410': {$ref: ./common.yaml#/components/responses/Gone}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/projects/{projectId}/diffs:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    post:
+      operationId: createTwoPointDiff
+      summary: Create or compute a controlled five-state two-point diff between two Commit/WIP endpoints
+      description: >
+        Applies the five-state content_manifest matrix. Only produces deterministic file diffs when both endpoints
+        hold AVAILABLE or ABSENT_CONFIRMED evidence; NOT_SHARED, MISSING, or UNSUPPORTED paths are explicitly reported
+        as incomparable and never misrepresented as deletions.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateTwoPointDiffRequest'}
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TwoPointDiffDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/projects/{projectId}/diffs/{diffId}:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+      - name: diffId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    get:
+      operationId: getTwoPointDiff
+      summary: Read a two-point diff result and optional symbol enrichment status
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TwoPointDiffDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/projects/{projectId}/code-comments:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    get:
+      operationId: listCodeComments
+      summary: List line-anchored code comments for a project, optionally filtered by diffId or path
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+        - name: diffId
+          in: query
+          required: false
+          schema: {$ref: ../common.schema.json#/$defs/Id}
+        - name: path
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CodeCommentListResponse'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+    post:
+      operationId: createCodeComment
+      summary: Create a line-anchored code comment bound to a unified discussion thread
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateCodeCommentRequest'}
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CodeCommentDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/projects/{projectId}/code-comments/{commentId}/replies:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+      - name: commentId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    post:
+      operationId: replyCodeComment
+      summary: Reply to a code comment via its unified discussion thread
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReplyCodeCommentRequest'}
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CodeCommentDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        '410': {$ref: ./common.yaml#/components/responses/Gone}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/projects/{projectId}/code-comments/{commentId}/discussion:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+      - name: commentId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    post:
+      operationId: changeCodeCommentDiscussion
+      summary: Update OPEN/RESOLVED status on the unified discussion thread backing a code comment
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ChangeCodeCommentStatusRequest'}
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CodeCommentDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        '410': {$ref: ./common.yaml#/components/responses/Gone}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/projects/{projectId}/code-comments/{commentId}/forward-chat:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+      - name: commentId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    post:
+      operationId: forwardCodeCommentToChat
+      summary: Forward or bind a code comment as a CODE_COMMENT_REF card in the space main room
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ForwardCodeCommentRequest'}
+      responses:
+        '200':
+          description: Forwarded.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CodeCommentDto'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        '410': {$ref: ./common.yaml#/components/responses/Gone}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /internal/v1/jobs/{jobId}/claim:
+    parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    post:
+      operationId: internalClaimJob
+      summary: Claim or reclaim an async job lease for Python worker execution
+      security:
+        - InternalHmacAuth: []
+      parameters:
+        - {$ref: '#/components/parameters/InternalTimestamp'}
+        - {$ref: '#/components/parameters/InternalNonce'}
+        - {$ref: '#/components/parameters/InternalSignature'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/InternalClaimJobRequest'}
+      responses:
+        '200':
+          description: Claim result.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/InternalClaimedJobResponse'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /internal/v1/jobs/{jobId}/output:
+    parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    post:
+      operationId: internalStoreJobOutput
+      summary: Upload worker output artifact bytes for verification and controlled storage
+      security:
+        - InternalHmacAuth: []
+      parameters:
+        - {$ref: '#/components/parameters/InternalTimestamp'}
+        - {$ref: '#/components/parameters/InternalNonce'}
+        - {$ref: '#/components/parameters/InternalSignature'}
+        - name: X-Orbit-Content-Sha256
+          in: header
+          required: true
+          schema: {$ref: ../common.schema.json#/$defs/Sha256}
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Stored.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/InternalStoredOutputResponse'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /internal/v1/jobs/{jobId}/result:
+    parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    post:
+      operationId: internalSubmitJobResult
+      summary: Submit an async job result subject to lease, version, and live-grant anti-revival checks
+      security:
+        - InternalHmacAuth: []
+      parameters:
+        - {$ref: '#/components/parameters/InternalTimestamp'}
+        - {$ref: '#/components/parameters/InternalNonce'}
+        - {$ref: '#/components/parameters/InternalSignature'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/InternalJobResultRequest'}
+      responses:
+        '200':
+          description: Result evaluation outcome.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/InternalJobResultResponse'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /internal/v1/jobs/{jobId}/fail:
+    parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema: {$ref: ../common.schema.json#/$defs/Id}
+    post:
+      operationId: internalFailJob
+      summary: Report a retryable or terminal failure for an active worker lease
+      security:
+        - InternalHmacAuth: []
+      parameters:
+        - {$ref: '#/components/parameters/InternalTimestamp'}
+        - {$ref: '#/components/parameters/InternalNonce'}
+        - {$ref: '#/components/parameters/InternalSignature'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/InternalJobFailRequest'}
+      responses:
+        '200':
+          description: Failure state updated if lease is still active.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/InternalJobFailResponse'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+components:
+  securitySchemes:
+    AccessToken: {$ref: ./common.yaml#/components/securitySchemes/AccessToken}
+    DeviceToken: {$ref: ./common.yaml#/components/securitySchemes/DeviceToken}
+    InternalHmacAuth:
+      type: apiKey
+      in: header
+      name: X-Orbit-Signature
+      description: >
+        Internal service-to-service HMAC-SHA256 authentication. Requires X-Orbit-Timestamp (epoch seconds within
+        allowed clock skew), X-Orbit-Nonce (single-use opaque anti-replay ID), and X-Orbit-Signature (lowercase hex
+        HMAC-SHA256 over canonical string METHOD + "\n" + PATH + "\n" + TIMESTAMP + "\n" + NONCE + "\n" +
+        BODY_SHA256_HEX). Public JWT tokens are rejected on /internal/v1/**.
+  parameters:
+    OptionalMemberEpoch:
+      name: X-Membership-Epoch
+      in: header
+      required: false
+      schema: {$ref: ./common.yaml#/components/schemas/PositiveSequence}
+      description: Required when operating on space-scoped files; omitted for independent personal airdrops.
+    InternalTimestamp:
+      name: X-Orbit-Timestamp
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^[0-9]{1,20}$'
+      description: Unix epoch seconds included in the canonical HMAC-SHA256 request signature.
+    InternalNonce:
+      name: X-Orbit-Nonce
+      in: header
+      required: true
+      schema: {$ref: ../common.schema.json#/$defs/Id}
+      description: Single-use anti-replay request nonce (UUID or opaque ID).
+    InternalSignature:
+      name: X-Orbit-Signature
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^[0-9a-f]{64}$'
+      description: Lowercase hex HMAC-SHA256 signature of METHOD + "\n" + PATH + "\n" + TIMESTAMP + "\n" + NONCE + "\n" + BODY_SHA256_HEX.
+  schemas:
+    UserSearchHit:
+      type: object
+      additionalProperties: false
+      required: [userId, displayName, emailMasked]
+      properties:
+        userId: {$ref: ../common.schema.json#/$defs/Id}
+        displayName:
+          type: string
+          minLength: 1
+        emailMasked:
+          type: string
+          minLength: 1
+    UserSearchResponse:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/UserSearchHit'}
+    FriendRequestStatus:
+      type: string
+      enum: [PENDING, ACCEPTED, REJECTED, CANCELLED]
+    FriendRequestDirection:
+      type: string
+      enum: [INCOMING, OUTGOING, ALL]
+    SendFriendRequestBody:
+      type: object
+      additionalProperties: false
+      required: [targetUserId]
+      properties:
+        targetUserId: {$ref: ../common.schema.json#/$defs/Id}
+    FriendRequestDto:
+      type: object
+      additionalProperties: false
+      required: [requestId, requesterUserId, recipientUserId, status, createdAt, updatedAt]
+      properties:
+        requestId: {$ref: ../common.schema.json#/$defs/Id}
+        requesterUserId: {$ref: ../common.schema.json#/$defs/Id}
+        recipientUserId: {$ref: ../common.schema.json#/$defs/Id}
+        status: {$ref: '#/components/schemas/FriendRequestStatus'}
+        createdAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+        updatedAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+    FriendRequestListResponse:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/FriendRequestDto'}
+    FriendSummary:
+      type: object
+      additionalProperties: false
+      required: [userId, displayName, becameFriendsAt]
+      description: Basic P2 friend identity summary; intentionally excludes remarks, online presence, or busy state.
+      properties:
+        userId: {$ref: ../common.schema.json#/$defs/Id}
+        displayName:
+          type: string
+          minLength: 1
+        becameFriendsAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+    FriendListResponse:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/FriendSummary'}
+    UploadSessionStatus:
+      type: string
+      enum: [INITIATED, UPLOADING, COMPLETED, EXPIRED, CANCELLED]
+    CreateUploadSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [targetScope, fileName, expectedSizeBytes, expectedSha256]
+      properties:
+        targetScope: {$ref: ./common.yaml#/components/schemas/GrantType}
+        spaceId:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Id}
+            - {type: 'null'}
+        fileName:
+          type: string
+          minLength: 1
+          maxLength: 255
+        contentType:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 255
+            - {type: 'null'}
+        expectedSizeBytes: {$ref: ../common.schema.json#/$defs/Sequence}
+        expectedSha256: {$ref: ../common.schema.json#/$defs/Sha256}
+        partSizeBytes:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/PositiveSequence}
+            - {type: 'null'}
+    UploadSessionDto:
+      type: object
+      additionalProperties: false
+      required:
+        - uploadId
+        - status
+        - targetScope
+        - spaceId
+        - fileName
+        - contentType
+        - expectedSizeBytes
+        - expectedSha256
+        - partSizeBytes
+        - totalParts
+        - uploadedParts
+        - instantMatchAvailable
+        - matchedFileId
+        - expiresAt
+      properties:
+        uploadId: {$ref: ../common.schema.json#/$defs/Id}
+        status: {$ref: '#/components/schemas/UploadSessionStatus'}
+        targetScope: {$ref: ./common.yaml#/components/schemas/GrantType}
+        spaceId:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Id}
+            - {type: 'null'}
+        fileName:
+          type: string
+          minLength: 1
+        contentType:
+          anyOf:
+            - type: string
+              minLength: 1
+            - {type: 'null'}
+        expectedSizeBytes: {$ref: ../common.schema.json#/$defs/Sequence}
+        expectedSha256: {$ref: ../common.schema.json#/$defs/Sha256}
+        partSizeBytes: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+        totalParts: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+        uploadedParts:
+          type: array
+          items: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+        instantMatchAvailable: {type: boolean}
+        matchedFileId:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Id}
+            - {type: 'null'}
+        expiresAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+    UploadPartAck:
+      type: object
+      additionalProperties: false
+      required: [uploadId, partNumber, sizeBytes, sha256]
+      properties:
+        uploadId: {$ref: ../common.schema.json#/$defs/Id}
+        partNumber: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+        sizeBytes: {$ref: ../common.schema.json#/$defs/Sequence}
+        sha256: {$ref: ../common.schema.json#/$defs/Sha256}
+    CompleteUploadSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedSha256]
+      properties:
+        expectedSha256: {$ref: ../common.schema.json#/$defs/Sha256}
+        useInstantMatch: {type: boolean}
+    FileLifecycleState:
+      type: string
+      enum: [ACTIVE, DELETED, FORCE_PURGED]
+    FileRecordDto:
+      type: object
+      additionalProperties: false
+      required:
+        - fileId
+        - spaceId
+        - ownerUserId
+        - fileName
+        - contentType
+        - sizeBytes
+        - sha256
+        - scope
+        - lifecycleState
+        - thumbnailJobId
+        - thumbnailReady
+        - createdAt
+      properties:
+        fileId: {$ref: ../common.schema.json#/$defs/Id}
+        spaceId:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Id}
+            - {type: 'null'}
+        ownerUserId: {$ref: ../common.schema.json#/$defs/Id}
+        fileName:
+          type: string
+          minLength: 1
+        contentType:
+          anyOf:
+            - type: string
+              minLength: 1
+            - {type: 'null'}
+        sizeBytes: {$ref: ../common.schema.json#/$defs/Sequence}
+        sha256: {$ref: ../common.schema.json#/$defs/Sha256}
+        scope: {$ref: ./common.yaml#/components/schemas/GrantType}
+        lifecycleState: {$ref: '#/components/schemas/FileLifecycleState'}
+        thumbnailJobId:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Id}
+            - {type: 'null'}
+        thumbnailReady: {type: boolean}
+        createdAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+    SpaceFileListResponse:
+      type: object
+      additionalProperties: false
+      required: [quotaUsedBytes, quotaLimitBytes, items]
+      properties:
+        quotaUsedBytes: {$ref: ../common.schema.json#/$defs/Sequence}
+        quotaLimitBytes: {$ref: ../common.schema.json#/$defs/Sequence}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/FileRecordDto'}
+    AttachSpaceFileRequest:
+      type: object
+      additionalProperties: false
+      required: [uploadId]
+      properties:
+        uploadId: {$ref: ../common.schema.json#/$defs/Id}
+    AirdropExpiryPreset:
+      type: string
+      enum: [H24, D7, PERMANENT]
+    AirdropDeliveryState:
+      type: string
+      enum: [DELIVERED, VIEWED, DOWNLOAD_STARTED]
+    AirdropListRole:
+      type: string
+      enum: [SENT, RECEIVED, ALL]
+    CreateAirdropRequest:
+      type: object
+      additionalProperties: false
+      required: [fileIds, recipientUserIds, expiryPreset]
+      properties:
+        fileIds:
+          type: array
+          items: {$ref: ../common.schema.json#/$defs/Id}
+          minItems: 1
+          maxItems: 50
+          uniqueItems: true
+        sourceSpaceId:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Id}
+            - {type: 'null'}
+        recipientUserIds:
+          type: array
+          items: {$ref: ../common.schema.json#/$defs/Id}
+          minItems: 1
+          maxItems: 50
+          uniqueItems: true
+        expiryPreset: {$ref: '#/components/schemas/AirdropExpiryPreset'}
+        maxDownloadsPerRecipient:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/PositiveSequence}
+            - {type: 'null'}
+        note:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 1000
+            - {type: 'null'}
+    AirdropFileItem:
+      type: object
+      additionalProperties: false
+      required: [fileId, fileName, contentType, sizeBytes, sha256]
+      properties:
+        fileId: {$ref: ../common.schema.json#/$defs/Id}
+        fileName:
+          type: string
+          minLength: 1
+        contentType:
+          anyOf:
+            - type: string
+              minLength: 1
+            - {type: 'null'}
+        sizeBytes: {$ref: ../common.schema.json#/$defs/Sequence}
+        sha256: {$ref: ../common.schema.json#/$defs/Sha256}
+    AirdropRecipientState:
+      type: object
+      additionalProperties: false
+      required: [recipientUserId, deliveryState, downloadCount, remainingDownloads, revoked, updatedAt]
+      properties:
+        recipientUserId: {$ref: ../common.schema.json#/$defs/Id}
+        deliveryState: {$ref: '#/components/schemas/AirdropDeliveryState'}
+        downloadCount: {$ref: ../common.schema.json#/$defs/Sequence}
+        remainingDownloads:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Sequence}
+            - {type: 'null'}
+        revoked: {type: boolean}
+        updatedAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+    AirdropShareDto:
+      type: object
+      additionalProperties: false
+      required:
+        - shareId
+        - senderUserId
+        - title
+        - expiryPreset
+        - expiresAt
+        - maxDownloadsPerRecipient
+        - revoked
+        - createdAt
+        - files
+        - recipients
+      properties:
+        shareId: {$ref: ../common.schema.json#/$defs/Id}
+        senderUserId: {$ref: ../common.schema.json#/$defs/Id}
+        title:
+          type: string
+          minLength: 1
+        expiryPreset: {$ref: '#/components/schemas/AirdropExpiryPreset'}
+        expiresAt:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Timestamp}
+            - {type: 'null'}
+        maxDownloadsPerRecipient:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/PositiveSequence}
+            - {type: 'null'}
+        revoked: {type: boolean}
+        createdAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+        files:
+          type: array
+          items: {$ref: '#/components/schemas/AirdropFileItem'}
+        recipients:
+          type: array
+          items: {$ref: '#/components/schemas/AirdropRecipientState'}
+    AirdropShareListResponse:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/AirdropShareDto'}
+    CreateDownloadSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [grantType, grantId, fileId]
+      properties:
+        grantType: {$ref: ./common.yaml#/components/schemas/GrantType}
+        grantId: {$ref: ../common.schema.json#/$defs/Id}
+        fileId: {$ref: ../common.schema.json#/$defs/Id}
+    DownloadSessionDto:
+      type: object
+      additionalProperties: false
+      required:
+        - downloadSessionId
+        - grantType
+        - grantId
+        - fileId
+        - fileName
+        - contentType
+        - sizeBytes
+        - sha256
+        - remainingDownloads
+        - expiresAt
+        - downloadPath
+      properties:
+        downloadSessionId: {$ref: ../common.schema.json#/$defs/Id}
+        grantType: {$ref: ./common.yaml#/components/schemas/GrantType}
+        grantId: {$ref: ../common.schema.json#/$defs/Id}
+        fileId: {$ref: ../common.schema.json#/$defs/Id}
+        fileName:
+          type: string
+          minLength: 1
+        contentType:
+          anyOf:
+            - type: string
+              minLength: 1
+            - {type: 'null'}
+        sizeBytes: {$ref: ../common.schema.json#/$defs/Sequence}
+        sha256: {$ref: ../common.schema.json#/$defs/Sha256}
+        remainingDownloads:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Sequence}
+            - {type: 'null'}
+        expiresAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+        downloadPath:
+          type: string
+          minLength: 1
+    DiffEndpointKind:
+      type: string
+      enum: [COMMIT, WIP]
+    DiffEndpointRef:
+      type: object
+      additionalProperties: false
+      required: [kind, id]
+      properties:
+        kind: {$ref: '#/components/schemas/DiffEndpointKind'}
+        id: {$ref: ../common.schema.json#/$defs/Id}
+    BackfillMissingReason:
+      type: string
+      enum: [MISSING, NOT_SHARED]
+    BackfillMissingItem:
+      type: object
+      additionalProperties: false
+      required: [path, endpointKind, endpointId, expectedBlobOid, reason]
+      properties:
+        path:
+          type: string
+          minLength: 1
+        endpointKind: {$ref: '#/components/schemas/DiffEndpointKind'}
+        endpointId: {$ref: ../common.schema.json#/$defs/Id}
+        expectedBlobOid:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/GitOid}
+            - {type: 'null'}
+        reason: {$ref: '#/components/schemas/BackfillMissingReason'}
+    BackfillCheckRequest:
+      type: object
+      additionalProperties: false
+      required: [baseEndpoint, targetEndpoint]
+      properties:
+        baseEndpoint: {$ref: '#/components/schemas/DiffEndpointRef'}
+        targetEndpoint: {$ref: '#/components/schemas/DiffEndpointRef'}
+        paths:
+          type: array
+          items:
+            type: string
+            minLength: 1
+    BackfillCheckResponse:
+      type: object
+      additionalProperties: false
+      required: [projectId, missingItems, unsupportedPaths]
+      properties:
+        projectId: {$ref: ../common.schema.json#/$defs/Id}
+        missingItems:
+          type: array
+          items: {$ref: '#/components/schemas/BackfillMissingItem'}
+        unsupportedPaths:
+          type: array
+          items:
+            type: string
+            minLength: 1
+    BackfillManifestItem:
+      type: object
+      additionalProperties: false
+      required: [path, mode, sizeBytes, sha256]
+      properties:
+        path:
+          type: string
+          minLength: 1
+        mode:
+          type: string
+          minLength: 1
+        blobOid:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/GitOid}
+            - {type: 'null'}
+        sizeBytes: {$ref: ../common.schema.json#/$defs/Sequence}
+        sha256: {$ref: ../common.schema.json#/$defs/Sha256}
+    CreateBackfillSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [targetKind, targetId, scopeDeclaration, items]
+      properties:
+        targetKind: {$ref: '#/components/schemas/DiffEndpointKind'}
+        targetId: {$ref: ../common.schema.json#/$defs/Id}
+        scopeDeclaration: {$ref: ./gitproject-cli.yaml#/components/schemas/ScopeDeclaration}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/BackfillManifestItem'}
+    BackfillSessionDto:
+      type: object
+      additionalProperties: false
+      required: [backfillId, requiredPaths, expiresAt]
+      properties:
+        backfillId: {$ref: ../common.schema.json#/$defs/Id}
+        requiredPaths:
+          type: array
+          items:
+            type: string
+            minLength: 1
+        expiresAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+    CompleteBackfillRequest:
+      type: object
+      additionalProperties: false
+      required: [payloadDigest, uploadedPaths]
+      properties:
+        payloadDigest: {$ref: ../common.schema.json#/$defs/Sha256}
+        uploadedPaths:
+          type: array
+          items:
+            type: string
+            minLength: 1
+    BackfillReceiptDto:
+      type: object
+      additionalProperties: false
+      required: [backfillId, projectId, targetKind, targetId, acceptedCount, completedAt]
+      properties:
+        backfillId: {$ref: ../common.schema.json#/$defs/Id}
+        projectId: {$ref: ../common.schema.json#/$defs/Id}
+        targetKind: {$ref: '#/components/schemas/DiffEndpointKind'}
+        targetId: {$ref: ../common.schema.json#/$defs/Id}
+        acceptedCount: {$ref: ../common.schema.json#/$defs/Sequence}
+        completedAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+    CreateTwoPointDiffRequest:
+      type: object
+      additionalProperties: false
+      required: [base, target]
+      properties:
+        base: {$ref: '#/components/schemas/DiffEndpointRef'}
+        target: {$ref: '#/components/schemas/DiffEndpointRef'}
+    TwoPointDiffStatus:
+      type: string
+      enum: [PENDING, READY, FAILED]
+    TwoPointDiffSummary:
+      type: object
+      additionalProperties: false
+      required: [comparableFiles, unsharedOrMissingFiles, unsupportedFiles, hasInsufficientData]
+      properties:
+        comparableFiles: {$ref: ../common.schema.json#/$defs/Sequence}
+        unsharedOrMissingFiles: {$ref: ../common.schema.json#/$defs/Sequence}
+        unsupportedFiles: {$ref: ../common.schema.json#/$defs/Sequence}
+        hasInsufficientData: {type: boolean}
+    TwoPointComparisonState:
+      type: string
+      enum:
+        - ADDED
+        - DELETED
+        - MODIFIED
+        - UNCHANGED
+        - INCOMPARABLE_NOT_SHARED
+        - INCOMPARABLE_MISSING
+        - INCOMPARABLE_UNSUPPORTED
+    DiffSymbolChange:
+      type: object
+      additionalProperties: false
+      required: [name, kind, oldStartLine, newStartLine]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        kind:
+          type: string
+          minLength: 1
+        oldStartLine:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/PositiveSequence}
+            - {type: 'null'}
+        newStartLine:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/PositiveSequence}
+            - {type: 'null'}
+    TwoPointDiffFileEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - path
+        - oldPath
+        - baseStatus
+        - targetStatus
+        - comparisonState
+        - deterministic
+        - reasonMessage
+        - patchText
+        - symbols
+      properties:
+        path:
+          type: string
+          minLength: 1
+        oldPath:
+          anyOf:
+            - type: string
+              minLength: 1
+            - {type: 'null'}
+        baseStatus: {$ref: ./common.yaml#/components/schemas/ContentManifestStatus}
+        targetStatus: {$ref: ./common.yaml#/components/schemas/ContentManifestStatus}
+        comparisonState: {$ref: '#/components/schemas/TwoPointComparisonState'}
+        deterministic: {type: boolean}
+        reasonMessage:
+          anyOf:
+            - type: string
+              minLength: 1
+            - {type: 'null'}
+        patchText:
+          anyOf:
+            - type: string
+            - {type: 'null'}
+        symbols:
+          type: array
+          items: {$ref: '#/components/schemas/DiffSymbolChange'}
+    TwoPointDiffDto:
+      type: object
+      additionalProperties: false
+      required: [diffId, projectId, base, target, status, enrichmentJobId, summary, files, createdAt]
+      properties:
+        diffId: {$ref: ../common.schema.json#/$defs/Id}
+        projectId: {$ref: ../common.schema.json#/$defs/Id}
+        base: {$ref: '#/components/schemas/DiffEndpointRef'}
+        target: {$ref: '#/components/schemas/DiffEndpointRef'}
+        status: {$ref: '#/components/schemas/TwoPointDiffStatus'}
+        enrichmentJobId:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Id}
+            - {type: 'null'}
+        summary: {$ref: '#/components/schemas/TwoPointDiffSummary'}
+        files:
+          type: array
+          items: {$ref: '#/components/schemas/TwoPointDiffFileEntry'}
+        createdAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+    CodeCommentSide:
+      type: string
+      enum: [OLD, NEW]
+    CodeCommentReplyDto:
+      type: object
+      additionalProperties: false
+      required: [messageId, senderId, bodyText, createdAt]
+      properties:
+        messageId: {$ref: ../common.schema.json#/$defs/Id}
+        senderId: {$ref: ../common.schema.json#/$defs/Id}
+        bodyText:
+          type: string
+          minLength: 1
+        createdAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+    CodeCommentDto:
+      type: object
+      additionalProperties: false
+      required:
+        - commentId
+        - spaceId
+        - projectId
+        - diffId
+        - base
+        - target
+        - filePath
+        - side
+        - lineNumber
+        - authorUserId
+        - bodyText
+        - rootChatMessageId
+        - discussionStatus
+        - discussionVersion
+        - replies
+        - createdAt
+        - updatedAt
+      properties:
+        commentId: {$ref: ../common.schema.json#/$defs/Id}
+        spaceId: {$ref: ../common.schema.json#/$defs/Id}
+        projectId: {$ref: ../common.schema.json#/$defs/Id}
+        diffId:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Id}
+            - {type: 'null'}
+        base: {$ref: '#/components/schemas/DiffEndpointRef'}
+        target: {$ref: '#/components/schemas/DiffEndpointRef'}
+        filePath:
+          type: string
+          minLength: 1
+        side: {$ref: '#/components/schemas/CodeCommentSide'}
+        lineNumber: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+        authorUserId: {$ref: ../common.schema.json#/$defs/Id}
+        bodyText:
+          type: string
+          minLength: 1
+        rootChatMessageId:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Id}
+            - {type: 'null'}
+        discussionStatus: {$ref: ./common.yaml#/components/schemas/DiscussionStatus}
+        discussionVersion: {$ref: ../common.schema.json#/$defs/Sequence}
+        replies:
+          type: array
+          items: {$ref: '#/components/schemas/CodeCommentReplyDto'}
+        createdAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+        updatedAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+    CodeCommentListResponse:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/CodeCommentDto'}
+    CreateCodeCommentRequest:
+      type: object
+      additionalProperties: false
+      required: [base, target, filePath, side, lineNumber, bodyText]
+      properties:
+        diffId:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Id}
+            - {type: 'null'}
+        base: {$ref: '#/components/schemas/DiffEndpointRef'}
+        target: {$ref: '#/components/schemas/DiffEndpointRef'}
+        filePath:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        side: {$ref: '#/components/schemas/CodeCommentSide'}
+        lineNumber: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+        bodyText:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        forwardToChat: {type: boolean}
+    ReplyCodeCommentRequest:
+      type: object
+      additionalProperties: false
+      required: [bodyText]
+      properties:
+        bodyText:
+          type: string
+          minLength: 1
+          maxLength: 4000
+    ChangeCodeCommentStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: {$ref: ./common.yaml#/components/schemas/DiscussionStatus}
+        conclusionMsgId:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Id}
+            - {type: 'null'}
+    ForwardCodeCommentRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        purpose:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 4000
+            - {type: 'null'}
+    InternalClaimJobRequest:
+      type: object
+      additionalProperties: false
+      required: [workerId, leaseSeconds]
+      properties:
+        workerId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        leaseSeconds: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+    InternalClaimedJobResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - claimed
+        - jobId
+        - jobType
+        - spaceId
+        - resourceId
+        - actorId
+        - inputObjectKey
+        - inputVersion
+        - resourceLifecycleVersion
+        - leaseId
+        - leaseUntil
+      properties:
+        claimed: {type: boolean}
+        jobId: {$ref: ../common.schema.json#/$defs/Id}
+        jobType: {type: string}
+        spaceId: {$ref: ../common.schema.json#/$defs/Id}
+        resourceId: {$ref: ../common.schema.json#/$defs/Id}
+        actorId: {$ref: ../common.schema.json#/$defs/Id}
+        inputObjectKey: {type: string}
+        inputVersion: {$ref: ../common.schema.json#/$defs/Sequence}
+        resourceLifecycleVersion: {$ref: ../common.schema.json#/$defs/Sequence}
+        leaseId:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Id}
+            - {type: 'null'}
+        leaseUntil:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Timestamp}
+            - {type: 'null'}
+    InternalStoredOutputResponse:
+      type: object
+      additionalProperties: false
+      required: [objectKey, sizeBytes, sha256]
+      properties:
+        objectKey:
+          type: string
+          minLength: 1
+        sizeBytes: {$ref: ../common.schema.json#/$defs/Sequence}
+        sha256: {$ref: ../common.schema.json#/$defs/Sha256}
+    InternalJobAcceptance:
+      type: string
+      enum: [ACCEPTED, ALREADY_ACCEPTED, STALE]
+    InternalJobResultRequest:
+      type: object
+      additionalProperties: false
+      required: [leaseId, expectedJobStatus, inputVersion, resourceLifecycleVersion]
+      properties:
+        leaseId: {$ref: ../common.schema.json#/$defs/Id}
+        expectedJobStatus: {const: RUNNING}
+        inputVersion: {$ref: ../common.schema.json#/$defs/Sequence}
+        resourceLifecycleVersion: {$ref: ../common.schema.json#/$defs/Sequence}
+        resultObjectKey:
+          anyOf:
+            - type: string
+              minLength: 1
+            - {type: 'null'}
+        stagingObjectKey:
+          anyOf:
+            - type: string
+              minLength: 1
+            - {type: 'null'}
+        expectedSizeBytes:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Sequence}
+            - {type: 'null'}
+        expectedSha256:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Sha256}
+            - {type: 'null'}
+    InternalJobResultResponse:
+      type: object
+      additionalProperties: false
+      required: [acceptance, jobId, resultObjectKey]
+      properties:
+        acceptance: {$ref: '#/components/schemas/InternalJobAcceptance'}
+        jobId: {$ref: ../common.schema.json#/$defs/Id}
+        resultObjectKey:
+          anyOf:
+            - type: string
+              minLength: 1
+            - {type: 'null'}
+    InternalJobFailRequest:
+      type: object
+      additionalProperties: false
+      required: [leaseId, retryable, failureCode]
+      properties:
+        leaseId: {$ref: ../common.schema.json#/$defs/Id}
+        retryable: {type: boolean}
+        failureCode:
+          type: string
+          minLength: 1
+          maxLength: 64
+        retryDelaySeconds:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Sequence}
+            - {type: 'null'}
+    InternalJobFailResponse:
+      type: object
+      additionalProperties: false
+      required: [updated]
+      properties:
+        updated: {type: boolean}

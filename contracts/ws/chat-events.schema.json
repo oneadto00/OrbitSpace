@@ -72,6 +72,56 @@
               "maxLength": 4000
             }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "targetId",
+            "grantType"
+          ],
+          "properties": {
+            "kind": {
+              "const": "FILE_REF"
+            },
+            "targetId": {
+              "$ref": "../common.schema.json#/$defs/Id"
+            },
+            "grantType": {
+              "$ref": "../common.schema.json#/$defs/GrantType"
+            },
+            "purpose": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "projectId",
+            "commentId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "CODE_COMMENT_REF"
+            },
+            "projectId": {
+              "$ref": "../common.schema.json#/$defs/Id"
+            },
+            "commentId": {
+              "$ref": "../common.schema.json#/$defs/Id"
+            },
+            "purpose": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            }
+          }
         }
       ]
     },

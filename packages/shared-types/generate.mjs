@@ -11,6 +11,7 @@ const domains = {
   IdentitySpace: "identity-space",
   Chat: "chat",
   GitProjectCli: "gitproject-cli",
+  P2FilesDiff: "p2-files-diff",
 };
 const index = [];
 for (const [domain, file] of Object.entries(domains)) {

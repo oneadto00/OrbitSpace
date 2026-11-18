@@ -53,7 +53,12 @@
         "RESOURCE_NOT_FOUND",
         "INVITE_UNAVAILABLE",
         "DEVICE_ACCESS_DENIED",
-        "INTERNAL_ERROR"
+        "INTERNAL_ERROR",
+        "QUOTA_EXCEEDED",
+        "SHARE_REVOKED",
+        "DOWNLOAD_LIMIT_EXCEEDED",
+        "NOT_FRIENDS_FOR_AIRDROP",
+        "DIFF_DATA_INSUFFICIENT"
       ]
     },
     "SpaceRole": {
@@ -111,6 +116,24 @@
         "TEXT",
         "COMMIT_REF",
         "WIP_REF",
+        "SYSTEM"
+      ]
+    },
+    "GrantType": {
+      "type": "string",
+      "enum": [
+        "SPACE_FILE",
+        "AIRDROP_SHARE"
+      ]
+    },
+    "P2MessageKind": {
+      "type": "string",
+      "enum": [
+        "TEXT",
+        "COMMIT_REF",
+        "WIP_REF",
+        "FILE_REF",
+        "CODE_COMMENT_REF",
         "SYSTEM"
       ]
     },
