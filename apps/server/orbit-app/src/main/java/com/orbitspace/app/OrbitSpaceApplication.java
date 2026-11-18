@@ -5,8 +5,10 @@ import org.springframework.boot.actuate.autoconfigure.security.servlet.Managemen
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 
+@EnableScheduling
 @EnableWebSecurity
 @SpringBootApplication(exclude = {
         SecurityAutoConfiguration.class, ManagementWebSecurityAutoConfiguration.class,
