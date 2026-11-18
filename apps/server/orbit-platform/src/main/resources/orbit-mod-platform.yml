@@ -1,0 +1,7 @@
+orbit:
+  platform:
+    object-grace: 7d
+    mail-from: ${ORBIT_MAIL_FROM:orbitspace@localhost}
+    # Keep this bucket/prefix outside the business backup restore boundary.
+    recovery-bucket: ${ORBIT_RECOVERY_BUCKET:${orbit.s3.bucket}-recovery}
+    recovery-prefix: ${ORBIT_RECOVERY_PREFIX:recovery/revocations/}
