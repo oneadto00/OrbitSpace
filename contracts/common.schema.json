@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OrbitSpace P1 wire types",
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "description": "Opaque application identifier. Preserve as a string."
+    },
+    "Sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "PositiveSequence": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "GitOid": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "Sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "AUTH_UNAUTHORIZED",
+        "AUTH_REVOKED",
+        "CSRF_INVALID",
+        "RATE_LIMITED",
+        "MEMBERSHIP_EPOCH_INVALID",
+        "SPACE_SINGLE_OWNER_REQUIRED",
+        "DEVICE_AUTH_PENDING",
+        "DEVICE_SLOW_DOWN",
+        "DEVICE_EXPIRED",
+        "WORKTREE_EPOCH_STALE",
+        "CAPTURE_SEQ_STALE",
+        "IDEMPOTENCY_CONFLICT",
+        "WS_TICKET_INVALID",
+        "WS_CURSOR_EXPIRED",
+        "RESOURCE_EXPIRED_OR_PURGED",
+        "AUTH_FORBIDDEN",
+        "INVALID_REQUEST",
+        "RESOURCE_NOT_FOUND",
+        "INVITE_UNAVAILABLE",
+        "DEVICE_ACCESS_DENIED",
+        "INTERNAL_ERROR"
+      ]
+    },
+    "SpaceRole": {
+      "type": "string",
+      "enum": [
+        "OWNER",
+        "ADMIN",
+        "MEMBER",
+        "VIEWER"
+      ]
+    },
+    "DataLevel": {
+      "type": "string",
+      "enum": [
+        "METADATA_ONLY",
+        "PATCH_ONLY",
+        "TREE_AVAILABLE"
+      ]
+    },
+    "ContentManifestStatus": {
+      "type": "string",
+      "enum": [
+        "AVAILABLE",
+        "ABSENT_CONFIRMED",
+        "NOT_SHARED",
+        "MISSING",
+        "UNSUPPORTED"
+      ]
+    },
+    "GitTrustState": {
+      "type": "string",
+      "enum": [
+        "DECLARED",
+        "VERIFIED",
+        "CONFLICT"
+      ]
+    },
+    "BaseKind": {
+      "type": "string",
+      "enum": [
+        "COMMIT",
+        "EMPTY_TREE"
+      ]
+    },
+    "DiscussionStatus": {
+      "type": "string",
+      "enum": [
+        "OPEN",
+        "RESOLVED"
+      ]
+    },
+    "P1MessageKind": {
+      "type": "string",
+      "enum": [
+        "TEXT",
+        "COMMIT_REF",
+        "WIP_REF",
+        "SYSTEM"
+      ]
+    },
+    "DeviceScope": {
+      "type": "string",
+      "enum": [
+        "metadata:write",
+        "patch:write"
+      ]
+    },
+    "CardState": {
+      "type": "string",
+      "enum": [
+        "AVAILABLE",
+        "FORBIDDEN",
+        "EXPIRED_OR_DELETED",
+        "FORCE_PURGED"
+      ]
+    },
+    "ApiError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "requestId",
+        "details"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requestId": {
+          "$ref": "#/$defs/Id"
+        },
+        "details": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}

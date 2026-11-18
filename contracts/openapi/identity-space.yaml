@@ -1,0 +1,960 @@
+openapi: 3.1.1
+info:
+  title: OrbitSpace P1 — Identity and spaces
+  version: 1.0.0
+  description: Account sessions are independent of space grants. Issue short-lived access tokens. Hash and rotate
+    refresh tokens; replay revokes the session chain. Rate-limit login, verification, reset and device flow. Every
+    space read/write checks current role, epoch and resource ownership. Rejoin creates a new epoch with a new
+    unread baseline and requires fresh device approval.
+security:
+  - AccessToken: []
+paths:
+  /api/v1/auth/register:
+    post:
+      operationId: register
+      summary: Register an email account and send a verification challenge
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EmailCredentials'}
+      responses:
+        '202':
+          description: Accepted.
+        '429': {$ref: ./common.yaml#/components/responses/RateLimited}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/auth/verify-email:
+    post:
+      operationId: verifyEmail
+      summary: Consume a single-use email verification challenge
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  minLength: 1
+                  writeOnly: true
+      responses:
+        '204':
+          description: Completed.
+        '429': {$ref: ./common.yaml#/components/responses/RateLimited}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      summary: Start a login session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EmailCredentials'}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AccessSession'}
+          headers:
+            Set-Cookie:
+              description: Set orbit_refresh with HttpOnly, Secure, SameSite=Strict and Path=/api/v1/auth. Use
+                only for CSRF token lookup, refresh and logout; state changes also require X-CSRF-Token.
+              schema: {type: string}
+            Cache-Control:
+              schema: {const: no-store}
+        '429': {$ref: ./common.yaml#/components/responses/RateLimited}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/auth/csrf:
+    get:
+      operationId: getCsrfToken
+      summary: Get a CSRF token tied to the browser session
+      security:
+        - RefreshCookie: []
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [csrfToken]
+                properties:
+                  csrfToken:
+                    type: string
+                    minLength: 1
+          headers:
+            Cache-Control:
+              schema: {const: no-store}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/auth/refresh:
+    post:
+      operationId: refreshSession
+      summary: Rotate the refresh cookie and issue a short-lived access token
+      security:
+        - RefreshCookie: []
+          CsrfHeader: []
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AccessSession'}
+          headers:
+            Set-Cookie:
+              description: Rotate orbit_refresh with HttpOnly, Secure, SameSite=Strict and Path=/api/v1/auth.
+                Use only for CSRF token lookup, refresh and logout; state changes also require X-CSRF-Token.
+              schema: {type: string}
+            Cache-Control:
+              schema: {const: no-store}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      summary: Revoke the current session and expire its cookie
+      security:
+        - RefreshCookie: []
+          CsrfHeader: []
+      responses:
+        '204':
+          description: Completed.
+          headers:
+            Set-Cookie:
+              description: Clear orbit_refresh with HttpOnly, Secure, SameSite=Strict and Path=/api/v1/auth. Use
+                only for CSRF token lookup, refresh and logout; state changes also require X-CSRF-Token.
+              schema: {type: string}
+            Cache-Control:
+              schema: {const: no-store}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/auth/password-reset/request:
+    post:
+      operationId: requestPasswordReset
+      summary: Send a password reset challenge if the account exists
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '202':
+          description: Accepted.
+        '429': {$ref: ./common.yaml#/components/responses/RateLimited}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/auth/password-reset/confirm:
+    post:
+      operationId: resetPassword
+      summary: Consume a reset challenge and revoke previous sessions
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token, newPassword]
+              properties:
+                token:
+                  type: string
+                  minLength: 1
+                  writeOnly: true
+                newPassword:
+                  type: string
+                  minLength: 1
+                  writeOnly: true
+      responses:
+        '204':
+          description: Completed.
+        '429': {$ref: ./common.yaml#/components/responses/RateLimited}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/auth/sessions:
+    get:
+      operationId: listLoginSessions
+      summary: List own active sessions
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/LoginSession'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/auth/sessions/{sessionId}:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    delete:
+      operationId: revokeLoginSession
+      summary: Revoke an owned login session
+      responses:
+        '204':
+          description: Completed.
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/auth/device/authorize:
+    post:
+      operationId: authorizeDevice
+      summary: Issue separate high-entropy device code and short user code
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [client_id, device_label]
+              properties:
+                client_id: {const: orbit-cli}
+                scope:
+                  type: string
+                  pattern: ^(metadata:write|patch:write)( (metadata:write|patch:write))*$
+                device_label:
+                  type: string
+                  minLength: 1
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeviceAuthorization'}
+          headers:
+            Cache-Control:
+              schema: {const: no-store}
+        '429': {$ref: ./common.yaml#/components/responses/RateLimited}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/auth/device/lookup:
+    post:
+      operationId: getPendingDeviceRequest
+      summary: Look up the device and requested scopes before consent
+      description: Authenticated browser only. Return the pending device label and scopes for informed approval.
+        Never return the device code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [user_code]
+              properties:
+                user_code:
+                  type: string
+                  minLength: 1
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [deviceLabel, requestedScopes, expiresAt]
+                properties:
+                  deviceLabel:
+                    type: string
+                    minLength: 1
+                  requestedScopes:
+                    type: array
+                    items: {$ref: ./common.yaml#/components/schemas/DeviceScope}
+                  expiresAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+          headers:
+            Cache-Control:
+              schema: {const: no-store}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '429': {$ref: ./common.yaml#/components/responses/RateLimited}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/auth/device/approve:
+    post:
+      operationId: approveDevice
+      summary: Approve a pending device request in the authenticated browser
+      description: Confirm device and requested scopes. Bind to the authenticated user, current active epoch and
+        project in this space. Granted scopes must be requested and permitted by the current role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DeviceApproval'}
+      responses:
+        '204':
+          description: Completed.
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '429': {$ref: ./common.yaml#/components/responses/RateLimited}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/auth/device/token:
+    post:
+      operationId: pollDeviceToken
+      summary: Poll for the approved device credential
+      description: Poll at the advertised interval. For slow_down add at least five seconds to all subsequent
+        intervals. Stop on denial or expiration. Only the high-entropy device code can redeem an approved grant.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [grant_type, device_code, client_id]
+              properties:
+                grant_type: {const: 'urn:ietf:params:oauth:grant-type:device_code'}
+                device_code:
+                  type: string
+                  minLength: 1
+                  writeOnly: true
+                client_id: {const: orbit-cli}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeviceAccessToken'}
+          headers:
+            Cache-Control:
+              schema: {const: no-store}
+        '400':
+          description: Device grant status or malformed grant.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DevicePollError'}
+        '429': {$ref: ./common.yaml#/components/responses/RateLimited}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/auth/device/credentials:
+    get:
+      operationId: listDeviceCredentials
+      summary: List own device grants without token material
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/DeviceGrant'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/auth/device/credentials/{credentialId}:
+    parameters:
+      - name: credentialId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    delete:
+      operationId: revokeDeviceCredential
+      summary: Revoke an owned device credential immediately
+      responses:
+        '204':
+          description: Completed.
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces:
+    post:
+      operationId: createSpace
+      summary: Create a space, optionally with its first Git project
+      description: Create exactly one OWNER and one main room atomically. Supplying initialProjectName also creates
+        the first project in the same operation.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                description: {type: string}
+                initialProjectName:
+                  type: string
+                  minLength: 1
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SpaceDetail'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+    get:
+      operationId: listMySpaces
+      summary: List current memberships with recent visits and unread counts
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/SpaceSummary'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    get:
+      operationId: getSpace
+      summary: Open a space and list its Git projects
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SpaceDetail'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/members:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    get:
+      operationId: listMembers
+      summary: List active members
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Member'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/invites:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    get:
+      operationId: listInvites
+      summary: List invitations managed by the owner or an administrator
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Invite'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+    post:
+      operationId: createInvite
+      summary: Create a revocable high-entropy invitation link
+      description: Owner or administrator. Only the owner can grant ADMIN; no invitation grants ownership.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateInvite'}
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [invite, joinUrl]
+                properties:
+                  invite: {$ref: '#/components/schemas/Invite'}
+                  joinUrl:
+                    type: string
+                    format: uri
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/invites/{inviteId}:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: inviteId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    delete:
+      operationId: revokeInvite
+      summary: Revoke a managed invitation in this space
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+      responses:
+        '204':
+          description: Completed.
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/space-invites/join:
+    post:
+      operationId: joinSpace
+      summary: Redeem an invitation and create the current membership
+      description: Check expiry, revocation and remaining uses transactionally. An already active membership consumes
+        no extra use. A former member needs a fresh invitation after revocation. Rejoining starts a new epoch
+        and sets the unread baseline to the current room position.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  minLength: 1
+                  writeOnly: true
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SpaceSummary'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/members/{userId}:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: userId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    patch:
+      operationId: changeMemberRole
+      summary: Change a current member role
+      description: Only OWNER manages ADMIN. ADMIN may manage ordinary members only. Reject owner demotion.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [role]
+              properties:
+                role: {$ref: '#/components/schemas/InviteRole'}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Member'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+    delete:
+      operationId: removeMember
+      summary: End a member epoch and revoke all space-bound access
+      description: OWNER or ADMIN subject to role hierarchy. A sole OWNER cannot be removed.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+      responses:
+        '204':
+          description: Completed.
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/owner:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    put:
+      operationId: transferOwnership
+      summary: Atomically transfer ownership to an active member
+      description: Current OWNER only. Demote prior owner to ADMIN within the transfer transaction.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [newOwnerUserId]
+              properties:
+                newOwnerUserId: {$ref: ../common.schema.json#/$defs/Id}
+      responses:
+        '204':
+          description: Completed.
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/leave:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    post:
+      operationId: leaveSpace
+      summary: Leave the space and end the current epoch
+      description: End device grants, reads, card previews and open sockets for the old epoch. Owner must first
+        transfer ownership.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+      responses:
+        '204':
+          description: Completed.
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+components:
+  securitySchemes:
+    AccessToken: {$ref: ./common.yaml#/components/securitySchemes/AccessToken}
+    RefreshCookie: {$ref: ./common.yaml#/components/securitySchemes/RefreshCookie}
+    CsrfHeader: {$ref: ./common.yaml#/components/securitySchemes/CsrfHeader}
+  schemas:
+    EmailCredentials:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+          writeOnly: true
+    AccessSession:
+      type: object
+      additionalProperties: false
+      required: [accessToken, tokenType, expiresIn, sessionId, userId]
+      properties:
+        accessToken:
+          type: string
+          minLength: 1
+        tokenType: {const: Bearer}
+        expiresIn:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        sessionId: {$ref: ../common.schema.json#/$defs/Id}
+        userId: {$ref: ../common.schema.json#/$defs/Id}
+    LoginSession:
+      type: object
+      additionalProperties: false
+      required: [sessionId, deviceLabel, createdAt, lastUsedAt, current]
+      properties:
+        sessionId: {$ref: ../common.schema.json#/$defs/Id}
+        deviceLabel:
+          type: string
+          minLength: 1
+        createdAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+        lastUsedAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+        current: {type: boolean}
+    ProjectSummary:
+      type: object
+      additionalProperties: false
+      required: [projectId, name]
+      properties:
+        projectId: {$ref: ../common.schema.json#/$defs/Id}
+        name:
+          type: string
+          minLength: 1
+    Member:
+      type: object
+      additionalProperties: false
+      required: [userId, displayName, role, membershipEpoch]
+      properties:
+        userId: {$ref: ../common.schema.json#/$defs/Id}
+        displayName:
+          type: string
+          minLength: 1
+        role: {$ref: ./common.yaml#/components/schemas/SpaceRole}
+        membershipEpoch: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+    SpaceSummary:
+      type: object
+      additionalProperties: false
+      required: [spaceId, name, role, membershipEpoch, recentlyVisitedAt, unreadDiscussionCount]
+      properties:
+        spaceId: {$ref: ../common.schema.json#/$defs/Id}
+        name:
+          type: string
+          minLength: 1
+        role: {$ref: ./common.yaml#/components/schemas/SpaceRole}
+        membershipEpoch: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+        recentlyVisitedAt:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Timestamp}
+            - {type: 'null'}
+        unreadDiscussionCount: {$ref: ../common.schema.json#/$defs/Sequence}
+      description: Count eligible retained messages after max(joinedBaselineSeq,lastReadSeq) for this epoch. Exclude
+        own messages and pure system notices; sequence gaps do not count.
+    SpaceDetail:
+      type: object
+      additionalProperties: false
+      required: [space, projects, roomId]
+      properties:
+        space: {$ref: '#/components/schemas/SpaceSummary'}
+        projects:
+          type: array
+          items: {$ref: '#/components/schemas/ProjectSummary'}
+        roomId: {$ref: ../common.schema.json#/$defs/Id}
+    InviteRole:
+      type: string
+      enum: [ADMIN, MEMBER, VIEWER]
+    CreateInvite:
+      type: object
+      additionalProperties: false
+      required: [expiresAt, maxUses, targetRole]
+      properties:
+        expiresAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+        maxUses:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        targetRole: {$ref: '#/components/schemas/InviteRole'}
+    Invite:
+      type: object
+      additionalProperties: false
+      required: [inviteId, expiresAt, maxUses, usedCount, targetRole, revoked]
+      properties:
+        inviteId: {$ref: ../common.schema.json#/$defs/Id}
+        expiresAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+        maxUses:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        usedCount: {$ref: ../common.schema.json#/$defs/Sequence}
+        targetRole: {$ref: '#/components/schemas/InviteRole'}
+        revoked: {type: boolean}
+    DeviceGrant:
+      type: object
+      additionalProperties: false
+      required:
+        - credentialId
+        - userId
+        - deviceId
+        - deviceLabel
+        - spaceId
+        - projectId
+        - membershipEpoch
+        - scopes
+        - expiresAt
+      properties:
+        credentialId: {$ref: ../common.schema.json#/$defs/Id}
+        userId: {$ref: ../common.schema.json#/$defs/Id}
+        deviceId: {$ref: ../common.schema.json#/$defs/Id}
+        deviceLabel:
+          type: string
+          minLength: 1
+        spaceId: {$ref: ../common.schema.json#/$defs/Id}
+        projectId: {$ref: ../common.schema.json#/$defs/Id}
+        membershipEpoch: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+        scopes:
+          type: array
+          items: {$ref: ./common.yaml#/components/schemas/DeviceScope}
+          minItems: 1
+          uniqueItems: true
+        expiresAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+    DeviceAuthorization:
+      type: object
+      additionalProperties: false
+      required: [device_code, user_code, verification_uri, interval, expires_in]
+      properties:
+        device_code:
+          type: string
+          minLength: 1
+        user_code:
+          type: string
+          minLength: 1
+        verification_uri:
+          type: string
+          format: uri
+        interval:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        expires_in:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+    DeviceApproval:
+      type: object
+      additionalProperties: false
+      required: [user_code, spaceId, projectId, membershipEpoch, scopes]
+      properties:
+        user_code:
+          type: string
+          minLength: 1
+        spaceId: {$ref: ../common.schema.json#/$defs/Id}
+        projectId: {$ref: ../common.schema.json#/$defs/Id}
+        membershipEpoch: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+        scopes:
+          type: array
+          items: {$ref: ./common.yaml#/components/schemas/DeviceScope}
+          minItems: 1
+          uniqueItems: true
+    DeviceAccessToken:
+      type: object
+      additionalProperties: false
+      required: [access_token, token_type, expires_in, scope, grant]
+      properties:
+        access_token:
+          type: string
+          minLength: 1
+        token_type: {const: Bearer}
+        expires_in:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        scope:
+          type: string
+          minLength: 1
+        grant: {$ref: '#/components/schemas/DeviceGrant'}
+    DevicePollError:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [error, code, message, requestId, details]
+          properties:
+            error: {const: authorization_pending}
+            code: {const: DEVICE_AUTH_PENDING}
+            message:
+              type: string
+              minLength: 1
+            requestId: {$ref: ../common.schema.json#/$defs/Id}
+            details:
+              type: object
+              additionalProperties: true
+        - type: object
+          additionalProperties: false
+          required: [error, code, message, requestId, details]
+          properties:
+            error: {const: slow_down}
+            code: {const: DEVICE_SLOW_DOWN}
+            message:
+              type: string
+              minLength: 1
+            requestId: {$ref: ../common.schema.json#/$defs/Id}
+            details:
+              type: object
+              additionalProperties: true
+        - type: object
+          additionalProperties: false
+          required: [error, code, message, requestId, details]
+          properties:
+            error: {const: expired_token}
+            code: {const: DEVICE_EXPIRED}
+            message:
+              type: string
+              minLength: 1
+            requestId: {$ref: ../common.schema.json#/$defs/Id}
+            details:
+              type: object
+              additionalProperties: true
+        - type: object
+          additionalProperties: false
+          required: [error, code, message, requestId, details]
+          properties:
+            error: {const: access_denied}
+            code: {const: DEVICE_ACCESS_DENIED}
+            message:
+              type: string
+              minLength: 1
+            requestId: {$ref: ../common.schema.json#/$defs/Id}
+            details:
+              type: object
+              additionalProperties: true
+        - type: object
+          additionalProperties: false
+          required: [error, code, message, requestId, details]
+          properties:
+            error: {const: invalid_grant}
+            code: {const: AUTH_UNAUTHORIZED}
+            message:
+              type: string
+              minLength: 1
+            requestId: {$ref: ../common.schema.json#/$defs/Id}
+            details:
+              type: object
+              additionalProperties: true
+        - type: object
+          additionalProperties: false
+          required: [error, code, message, requestId, details]
+          properties:
+            error: {const: invalid_request}
+            code: {const: INVALID_REQUEST}
+            message:
+              type: string
+              minLength: 1
+            requestId: {$ref: ../common.schema.json#/$defs/Id}
+            details:
+              type: object
+              additionalProperties: true

@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WsEnvelope",
+  "description": "Native JSON over /ws/chat?ticket=<one-use-ticket>. Atomically consume the short-lived room-bound ticket after checking Origin. Long-lived tokens are forbidden in URLs. One room and membership epoch per connection. Client sends PING or SEND_MSG; server sends PONG, MSG_ACK after commit, ROOM_EVENT, ERROR or AUTH_REVOKED_CLOSE followed by close. Enforce frame size and frequency limits and current authorization on every send/subscription. Echo requestId on errors when available.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "PING"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "PONG"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "type": {
+          "const": "SEND_MSG"
+        },
+        "payload": {
+          "$ref": "./chat-events.schema.json#/$defs/SendMessage"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "type": {
+          "const": "MSG_ACK"
+        },
+        "payload": {
+          "$ref": "./chat-events.schema.json#/$defs/MessageAck"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "type": {
+          "const": "ROOM_EVENT"
+        },
+        "payload": {
+          "$ref": "./chat-events.schema.json#/$defs/RoomEvent"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "type": {
+          "const": "AUTH_REVOKED_CLOSE"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "spaceId",
+            "membershipEpoch",
+            "code"
+          ],
+          "properties": {
+            "spaceId": {
+              "$ref": "../common.schema.json#/$defs/Id"
+            },
+            "membershipEpoch": {
+              "$ref": "../common.schema.json#/$defs/PositiveSequence"
+            },
+            "code": {
+              "type": "string",
+              "enum": [
+                "AUTH_REVOKED",
+                "MEMBERSHIP_EPOCH_INVALID"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "type": {
+          "const": "ERROR"
+        },
+        "payload": {
+          "$ref": "../common.schema.json#/$defs/ApiError"
+        }
+      }
+    }
+  ]
+}

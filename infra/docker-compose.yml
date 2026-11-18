@@ -1,0 +1,121 @@
+name: orbitspace
+
+x-minio-env: &minio-env
+  MINIO_ROOT_USER: ${MINIO_ROOT_USER:-orbit-local}
+  MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-local-only-minio-password}
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: orbitspace
+      MYSQL_USER: orbitspace
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-local-only-app-password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-local-only-root-password}
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", 'MYSQL_PWD="$$MYSQL_PASSWORD" mysql -h 127.0.0.1 -u "$$MYSQL_USER" "$$MYSQL_DATABASE" -e "SELECT 1"']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7.4
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    build:
+      context: ./minio
+      target: server
+    environment: *minio-env
+    command: ["server", "/data", "--console-address", ":9001"]
+    volumes:
+      - minio-data:/data
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9000/minio/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  minio-init:
+    build:
+      context: ./minio
+      target: client
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment: *minio-env
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        mc mb --ignore-existing local/orbitspace-private
+        mc anonymous set none local/orbitspace-private
+
+  mailpit:
+    image: axllent/mailpit:v1.34.0
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
+  nginx:
+    build: ./nginx
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8443:8443"
+    volumes:
+      - local-tls:/etc/nginx/local-tls
+
+  server:
+    profiles: [fullstack]
+    build: ../apps/server
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+    environment:
+      SERVER_PORT: 8080
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/orbitspace
+      SPRING_DATASOURCE_USERNAME: orbitspace
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-local-only-app-password}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_MAIL_HOST: mailpit
+      SPRING_MAIL_PORT: 1025
+      ORBIT_PUBLIC_ORIGIN: https://localhost:8443
+      ORBIT_S3_ENDPOINT: http://minio:9000
+      ORBIT_S3_BUCKET: orbitspace-private
+      ORBIT_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-orbit-local}
+      ORBIT_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-local-only-minio-password}
+
+  web:
+    profiles: [fullstack]
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+
+volumes:
+  mysql-data:
+  redis-data:
+  minio-data:
+  local-tls:

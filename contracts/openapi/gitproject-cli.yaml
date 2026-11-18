@@ -1,0 +1,739 @@
+openapi: 3.1.1
+info:
+  title: OrbitSpace P1 — Git projects and CLI capture
+  version: 1.0.0
+  description: Browser endpoints enforce active membership epoch, role, project and resource ownership. CLI endpoints
+    require live device credentials and recheck user, device, space, project, scopes and membership epoch for
+    every request and completion. Member or above may share their own work. No storage capability is conveyed
+    by an OID or a snapshot ID.
+security:
+  - AccessToken: []
+paths:
+  /api/v1/spaces/{spaceId}/projects:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    post:
+      operationId: createGitProject
+      summary: Create a Git project in the current space
+      description: OWNER or ADMIN may create a project.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GitProject'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/projects/{projectId}/graph:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    get:
+      operationId: getProjectGraph
+      summary: Read a page of the project DAG, refs and WIP nodes
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+          description: Opaque continuation from the preceding page.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+          description: Maximum rows in the page; default 50.
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProjectGraph'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/projects/{projectId}/commits/{commitOid}:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: commitOid
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/GitOid}
+    get:
+      operationId: getCommit
+      summary: Read a single commit and the selected parent basis
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+        - name: parentOid
+          in: query
+          required: false
+          schema: {$ref: ../common.schema.json#/$defs/GitOid}
+          description: Must be one of this commit’s ordered parents.
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CommitDetail'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/projects/{projectId}/commits/{commitOid}/patch:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: commitOid
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/GitOid}
+    get:
+      operationId: downloadCommitPatch
+      summary: Read an available single-commit patch for its selected parent
+      description: Require currently authorized bytes for exactly this commit, parent and scope. Never substitute
+        a WIP patch. When metadata is the only available evidence return RESOURCE_NOT_FOUND.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+        - name: parentOid
+          in: query
+          required: false
+          schema: {$ref: ../common.schema.json#/$defs/GitOid}
+          description: Actual ordered parent; defaults to first parent, uses empty tree for a root commit.
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          headers:
+            Cache-Control:
+              schema: {const: no-store}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '404': {$ref: ./common.yaml#/components/responses/Error}
+        '410': {$ref: ./common.yaml#/components/responses/Gone}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/projects/{projectId}/snapshots/{snapshotId}:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: snapshotId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    get:
+      operationId: getSnapshot
+      summary: Read a retained immutable WIP snapshot
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SnapshotDetail'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '410': {$ref: ./common.yaml#/components/responses/Gone}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/projects/{projectId}/snapshots/{snapshotId}/patch:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: snapshotId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    get:
+      operationId: downloadPatch
+      summary: Stream one authorized immutable patch
+      description: Resolve the immutable business reference and recheck permission and lifecycle for each read.
+        METADATA_ONLY has no patch. Return exact frozen bytes via the authenticated proxy.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          headers:
+            Cache-Control:
+              schema: {const: no-store}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '404': {$ref: ./common.yaml#/components/responses/Error}
+        '410': {$ref: ./common.yaml#/components/responses/Gone}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/cli/projects/{projectId}/worktrees:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    post:
+      operationId: registerWorktree
+      summary: Bind a local worktree instance and allocate its server epoch
+      description: Requires metadata:write. Scope localInstanceId to the project, principal and device. Return
+        the existing binding on identical retry.
+      security:
+        - DeviceToken: []
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [localInstanceId]
+              properties:
+                localInstanceId: {$ref: ../common.schema.json#/$defs/Id}
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Worktree'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/cli/projects/{projectId}/worktrees/{worktreeId}/epoch:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: worktreeId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    post:
+      operationId: advanceWorktreeEpoch
+      summary: Advance the worktree epoch after explicit reinitialization
+      description: Requires metadata:write. Atomically compare expected epoch and allocate a new one. Invalidate
+        older in-flight captures. Reset currentCaptureSeq to zero. Check an identical retry before the epoch precondition.
+      security:
+        - DeviceToken: []
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedWorktreeEpoch]
+              properties:
+                expectedWorktreeEpoch: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Worktree'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/cli/projects/{projectId}/reports:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    post:
+      operationId: createReport
+      summary: Open an upload session for the frozen manifest
+      description: Requires metadata:write and also patch:write for PATCH_ONLY. Compare all principal and resource
+        bindings to the payload, verify payloadDigest and reserve the session against the exact manifest. Every
+        retry checks current authorization. After checking the idempotency key against stored input, require the
+        current server epoch and a strictly newer captureSeq before pointer mutation. Reject stale worktreeEpoch/captureSeq
+        or a changed payload for the same key with 409. Uniqueness is (worktreeId,worktreeEpoch,captureSeq).
+      security:
+        - DeviceToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: '#/components/schemas/PushState'}
+                - properties:
+                    captureState:
+                      type: string
+                      enum: [CHANGES, NO_SHARED_CHANGES]
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReportSession'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/cli/projects/{projectId}/reports/{reportId}/patch:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: reportId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    put:
+      operationId: putTemporaryPatch
+      summary: Upload the exact patch bytes to the report staging object
+      description: Requires patch:write on this still-open report. Enforce frozen size, SHA-256 and quota. Repeating
+        the same bytes is idempotent. The server streams to private temporary storage. Reject differing bytes
+        or a report without a declared patch.
+      security:
+        - DeviceToken: []
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '204':
+          description: Completed.
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        '410': {$ref: ./common.yaml#/components/responses/Gone}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/cli/projects/{projectId}/reports/{reportId}/complete:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: reportId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    post:
+      operationId: completeReport
+      summary: Finalize one snapshot and conditionally advance the worktree pointer
+      description: Recheck all scopes required by the report. Validate digest/size and promote the temporary patch
+        to immutable storage before the DB transaction establishes its reference. Metadata-only skips the object
+        step. Commit snapshot, pointer and outbox together. Return the original receipt on identical retry, including
+        after a lost ACK. Grace-period collection rechecks references. Every retry checks current authorization.
+        After checking the idempotency key against stored input, require the current server epoch and a strictly
+        newer captureSeq before pointer mutation. Reject stale worktreeEpoch/captureSeq or a changed payload for
+        the same key with 409. Uniqueness is (worktreeId,worktreeEpoch,captureSeq).
+      security:
+        - DeviceToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReportProof'}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CaptureReceipt'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        '410': {$ref: ./common.yaml#/components/responses/Gone}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/cli/projects/{projectId}/worktrees/{worktreeId}/clean:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: worktreeId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    post:
+      operationId: reportClean
+      summary: End the current WIP only for a genuinely clean capture
+      description: Requires metadata:write. Verify route and payload worktree match. Reuse digest/idempotency
+        checks and the same conditional update as snapshot completion. Never infer clean from a new commit, empty
+        patch or excluded changes. Every retry checks current authorization. After checking the idempotency key
+        against stored input, require the current server epoch and a strictly newer captureSeq before pointer
+        mutation. Reject stale worktreeEpoch/captureSeq or a changed payload for the same key with 409. Uniqueness
+        is (worktreeId,worktreeEpoch,captureSeq).
+      security:
+        - DeviceToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: '#/components/schemas/PushState'}
+                - properties:
+                    captureState: {const: CLEAN}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Worktree'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/projects/{projectId}/snapshots/{snapshotId}/parse-jobs/{jobId}/retry:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: snapshotId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: jobId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    post:
+      operationId: retrySnapshotParse
+      summary: Retry a failed parse from its retained input
+      description: Authorized snapshot owner with write access or space administrator. Require a failed job for
+        this snapshot and live input. Start a new attempt with the retained input. Accept results only when input
+        version, lifecycle version, task state and processing grant still match in the write transaction.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      responses:
+        '202':
+          description: Accepted.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ParseJob'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        '410': {$ref: ./common.yaml#/components/responses/Gone}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/cli/projects/{projectId}/snapshots/{snapshotId}/parse-jobs/{jobId}/retry:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: snapshotId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: jobId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    post:
+      operationId: retryOwnReportParse
+      summary: Retry parsing an owned capture using the retained patch
+      description: Requires patch:write for the bound project and an owned snapshot. Use the same failed-job check,
+        input and lifecycle versions, and idempotent retry as the browser endpoint.
+      security:
+        - DeviceToken: []
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      responses:
+        '202':
+          description: Accepted.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ParseJob'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        '410': {$ref: ./common.yaml#/components/responses/Gone}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+components:
+  securitySchemes:
+    AccessToken: {$ref: ./common.yaml#/components/securitySchemes/AccessToken}
+    DeviceToken: {$ref: ./common.yaml#/components/securitySchemes/DeviceToken}
+  schemas:
+    Head: {$ref: ../cli/push-state.schema.json#/$defs/Head}
+    CommitMetadata: {$ref: ../cli/push-state.schema.json#/$defs/CommitMetadata}
+    RefObservation: {$ref: ../cli/push-state.schema.json#/$defs/RefObservation}
+    StagingSummary: {$ref: ../cli/push-state.schema.json#/$defs/StagingSummary}
+    ContentManifestEntry: {$ref: ../cli/push-state.schema.json#/$defs/ContentManifestEntry}
+    ScopeDeclaration: {$ref: ../cli/push-state.schema.json#/$defs/ScopeDeclaration}
+    PatchDescriptor: {$ref: ../cli/push-state.schema.json#/$defs/PatchDescriptor}
+    CaptureState: {$ref: ../cli/push-state.schema.json#/$defs/CaptureState}
+    PushState: {$ref: ../cli/push-state.schema.json#/$defs/PushState}
+    GitProject:
+      type: object
+      additionalProperties: false
+      required: [spaceId, projectId, name]
+      properties:
+        spaceId: {$ref: ../common.schema.json#/$defs/Id}
+        projectId: {$ref: ../common.schema.json#/$defs/Id}
+        name:
+          type: string
+          minLength: 1
+    ObservationSource:
+      type: object
+      additionalProperties: false
+      required: [deviceId, userId, observedAt]
+      properties:
+        deviceId: {$ref: ../common.schema.json#/$defs/Id}
+        userId: {$ref: ../common.schema.json#/$defs/Id}
+        observedAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+    CommitObservation:
+      type: object
+      additionalProperties: false
+      required: [source, trustState, metadata]
+      properties:
+        source: {$ref: '#/components/schemas/ObservationSource'}
+        trustState: {$ref: ./common.yaml#/components/schemas/GitTrustState}
+        metadata: {$ref: '#/components/schemas/CommitMetadata'}
+    CommitNode:
+      type: object
+      additionalProperties: false
+      required: [oid, trustState, observations, missingParentOids]
+      properties:
+        oid: {$ref: ../common.schema.json#/$defs/GitOid}
+        trustState: {$ref: ./common.yaml#/components/schemas/GitTrustState}
+        observations:
+          type: array
+          items: {$ref: '#/components/schemas/CommitObservation'}
+          minItems: 1
+        missingParentOids:
+          type: array
+          items: {$ref: ../common.schema.json#/$defs/GitOid}
+      description: Preserve ordered parent arrays and conflicting observations per source. Presence of a full
+        OID alone is DECLARED. Missing ancestry is displayed as a boundary.
+    ObservedRef:
+      type: object
+      additionalProperties: false
+      required: [ref, source]
+      properties:
+        ref: {$ref: '#/components/schemas/RefObservation'}
+        source: {$ref: '#/components/schemas/ObservationSource'}
+    ParseState:
+      type: string
+      enum: [NOT_REQUESTED, PENDING, RUNNING, SUCCEEDED, RETRY_WAIT, FAILED, CANCELLED]
+    WipNode:
+      type: object
+      additionalProperties: false
+      required:
+        - snapshotId
+        - worktreeId
+        - worktreeEpoch
+        - captureSeq
+        - source
+        - head
+        - capturedAt
+        - freshness
+        - captureState
+        - parseState
+        - dataLevel
+      properties:
+        snapshotId: {$ref: ../common.schema.json#/$defs/Id}
+        worktreeId: {$ref: ../common.schema.json#/$defs/Id}
+        worktreeEpoch: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+        captureSeq: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+        source: {$ref: '#/components/schemas/ObservationSource'}
+        head: {$ref: '#/components/schemas/Head'}
+        capturedAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+        freshness:
+          type: string
+          enum: [ACTIVE, STALE]
+        captureState: {$ref: '#/components/schemas/CaptureState'}
+        parseState: {$ref: '#/components/schemas/ParseState'}
+        dataLevel: {$ref: ./common.yaml#/components/schemas/DataLevel}
+      description: Freshness describes the last actively shared state. A new commit does not retire a WIP. Historical
+        immutable IDs remain valid under retention.
+    ProjectGraph:
+      type: object
+      additionalProperties: false
+      required: [projectId, commits, refs, wipNodes, nextCursor]
+      properties:
+        projectId: {$ref: ../common.schema.json#/$defs/Id}
+        commits:
+          type: array
+          items: {$ref: '#/components/schemas/CommitNode'}
+        refs:
+          type: array
+          items: {$ref: '#/components/schemas/ObservedRef'}
+        wipNodes:
+          type: array
+          items: {$ref: '#/components/schemas/WipNode'}
+        nextCursor:
+          anyOf:
+            - type: string
+              minLength: 1
+            - {type: 'null'}
+      description: DAG with source-scoped reference observations and last WIP per worktree; missing parent endpoints
+        may be outside this page.
+    CommitDetail:
+      type: object
+      additionalProperties: false
+      required: [projectId, commit, selectedParentOid, dataLevel, scopeDeclaration, contentManifest, patch]
+      properties:
+        projectId: {$ref: ../common.schema.json#/$defs/Id}
+        commit: {$ref: '#/components/schemas/CommitNode'}
+        selectedParentOid:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/GitOid}
+            - {type: 'null'}
+        dataLevel: {$ref: ./common.yaml#/components/schemas/DataLevel}
+        scopeDeclaration: {$ref: '#/components/schemas/ScopeDeclaration'}
+        contentManifest:
+          type: array
+          items: {$ref: '#/components/schemas/ContentManifestEntry'}
+        patch:
+          anyOf:
+            - {$ref: '#/components/schemas/PatchDescriptor'}
+            - {type: 'null'}
+      description: For the requested actual parent only; default to first parent, null for root. Return a patch
+        descriptor only when the service holds authorized evidence for this exact parent-to-commit comparison;
+        otherwise return null.
+    SnapshotDetail:
+      type: object
+      additionalProperties: false
+      required: [projectId, wip, scopeDeclaration, contentManifest, stagingSummary, patch, note, parseJobId]
+      properties:
+        projectId: {$ref: ../common.schema.json#/$defs/Id}
+        wip: {$ref: '#/components/schemas/WipNode'}
+        scopeDeclaration: {$ref: '#/components/schemas/ScopeDeclaration'}
+        contentManifest:
+          type: array
+          items: {$ref: '#/components/schemas/ContentManifestEntry'}
+        stagingSummary: {$ref: '#/components/schemas/StagingSummary'}
+        patch:
+          anyOf:
+            - {$ref: '#/components/schemas/PatchDescriptor'}
+            - {type: 'null'}
+        note:
+          anyOf:
+            - type: string
+              minLength: 1
+            - {type: 'null'}
+        parseJobId:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Id}
+            - {type: 'null'}
+      description: Main patch is the approved change from base HEAD (EMPTY_TREE for an unborn repository) to final
+        worktree. Staging is auxiliary. Only authorized retained bytes may be read. Capture and parse status are
+        independent.
+    Worktree:
+      type: object
+      additionalProperties: false
+      required: [projectId, worktreeId, worktreeEpoch, currentCaptureSeq, activeSnapshotId]
+      properties:
+        projectId: {$ref: ../common.schema.json#/$defs/Id}
+        worktreeId: {$ref: ../common.schema.json#/$defs/Id}
+        worktreeEpoch: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+        currentCaptureSeq: {$ref: ../common.schema.json#/$defs/Sequence}
+        activeSnapshotId:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Id}
+            - {type: 'null'}
+    ReportSession:
+      type: object
+      additionalProperties: false
+      required: [reportId, expiresAt, patchRequired]
+      properties:
+        reportId: {$ref: ../common.schema.json#/$defs/Id}
+        expiresAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+        patchRequired: {type: boolean}
+    CaptureReceipt:
+      type: object
+      additionalProperties: false
+      required: [worktreeId, worktreeEpoch, captureSeq, snapshotId, snapshotUrl, parseState]
+      properties:
+        worktreeId: {$ref: ../common.schema.json#/$defs/Id}
+        worktreeEpoch: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+        captureSeq: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+        snapshotId: {$ref: ../common.schema.json#/$defs/Id}
+        snapshotUrl:
+          type: string
+          format: uri-reference
+        parseState: {$ref: '#/components/schemas/ParseState'}
+    ReportProof:
+      type: object
+      additionalProperties: false
+      required: [idempotencyKey, payloadDigest]
+      properties:
+        idempotencyKey: {$ref: ../common.schema.json#/$defs/Id}
+        payloadDigest: {$ref: ../common.schema.json#/$defs/Sha256}
+    ParseJob:
+      type: object
+      additionalProperties: false
+      required: [jobId, snapshotId, state]
+      properties:
+        jobId: {$ref: ../common.schema.json#/$defs/Id}
+        snapshotId: {$ref: ../common.schema.json#/$defs/Id}
+        state: {$ref: '#/components/schemas/ParseState'}

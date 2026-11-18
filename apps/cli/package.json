@@ -1,0 +1,18 @@
+{
+  "name": "@orbitspace/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@orbitspace/shared-types": "workspace:*",
+    "commander": "15.1.0",
+    "ignore": "7.0.16",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "tsup": "9.0.0",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}

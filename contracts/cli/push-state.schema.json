@@ -1,0 +1,434 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PushState",
+  "$ref": "#/$defs/PushState",
+  "$defs": {
+    "Head": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "baseKind",
+            "baseCommitOid",
+            "branch"
+          ],
+          "properties": {
+            "baseKind": {
+              "const": "COMMIT"
+            },
+            "baseCommitOid": {
+              "$ref": "../common.schema.json#/$defs/GitOid"
+            },
+            "branch": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "baseKind",
+            "baseCommitOid",
+            "branch"
+          ],
+          "properties": {
+            "baseKind": {
+              "const": "EMPTY_TREE"
+            },
+            "baseCommitOid": {
+              "type": "null"
+            },
+            "branch": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "description": "Branch is null for detached HEAD. EMPTY_TREE represents an unborn repository."
+    },
+    "CommitMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "oid",
+        "parents",
+        "subject",
+        "authorName",
+        "authoredAt"
+      ],
+      "properties": {
+        "oid": {
+          "$ref": "../common.schema.json#/$defs/GitOid"
+        },
+        "parents": {
+          "type": "array",
+          "items": {
+            "$ref": "../common.schema.json#/$defs/GitOid"
+          },
+          "uniqueItems": true,
+          "description": "In Git parent order; the first item is the default comparison parent."
+        },
+        "subject": {
+          "type": "string"
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "authorEmail": {
+          "type": "string",
+          "minLength": 1
+        },
+        "authoredAt": {
+          "$ref": "../common.schema.json#/$defs/Timestamp"
+        }
+      }
+    },
+    "RefObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "targetOid",
+        "observedAt"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "targetOid": {
+          "$ref": "../common.schema.json#/$defs/GitOid"
+        },
+        "observedAt": {
+          "$ref": "../common.schema.json#/$defs/Timestamp"
+        }
+      }
+    },
+    "ScopeDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "includedPaths",
+        "hiddenItemCount",
+        "excludedItemCount"
+      ],
+      "properties": {
+        "includedPaths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Approved, repository-relative Git path. Omit hidden paths entirely, including exclusion reasons."
+          },
+          "uniqueItems": true
+        },
+        "hiddenItemCount": {
+          "$ref": "../common.schema.json#/$defs/Sequence"
+        },
+        "excludedItemCount": {
+          "$ref": "../common.schema.json#/$defs/Sequence"
+        }
+      },
+      "description": "Only disclosed paths belong here. Absence outside the declared coverage is unknown. Counts include no path names."
+    },
+    "ContentManifestEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "status"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Approved, repository-relative Git path. Omit hidden paths entirely, including exclusion reasons."
+        },
+        "status": {
+          "$ref": "../common.schema.json#/$defs/ContentManifestStatus"
+        },
+        "sha256": {
+          "$ref": "../common.schema.json#/$defs/Sha256"
+        }
+      },
+      "description": "Status of the final-worktree path in the disclosed scope. Only ABSENT_CONFIRMED asserts absence. AVAILABLE requires provided content or verified reconstruction evidence."
+    },
+    "StagingSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "staged",
+        "unstaged",
+        "untracked"
+      ],
+      "properties": {
+        "staged": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Approved, repository-relative Git path. Omit hidden paths entirely, including exclusion reasons."
+          }
+        },
+        "unstaged": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Approved, repository-relative Git path. Omit hidden paths entirely, including exclusion reasons."
+          }
+        },
+        "untracked": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Approved, repository-relative Git path. Omit hidden paths entirely, including exclusion reasons."
+          }
+        }
+      },
+      "description": "Approved path names only; staged and unstaged sets may overlap. This summary does not reconstruct the index."
+    },
+    "PatchDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sha256",
+        "sizeBytes"
+      ],
+      "properties": {
+        "sha256": {
+          "$ref": "../common.schema.json#/$defs/Sha256"
+        },
+        "sizeBytes": {
+          "$ref": "../common.schema.json#/$defs/Sequence"
+        }
+      },
+      "description": "SHA-256 and exact size of the frozen raw patch bytes, from base HEAD (or the empty tree) to the final worktree."
+    },
+    "ShareContent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "dataLevel"
+          ],
+          "properties": {
+            "dataLevel": {
+              "const": "METADATA_ONLY"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "dataLevel",
+            "patch"
+          ],
+          "properties": {
+            "dataLevel": {
+              "const": "PATCH_ONLY"
+            },
+            "patch": {
+              "$ref": "#/$defs/PatchDescriptor"
+            }
+          }
+        }
+      ]
+    },
+    "CaptureState": {
+      "type": "string",
+      "enum": [
+        "CHANGES",
+        "NO_SHARED_CHANGES",
+        "CLEAN"
+      ]
+    },
+    "PushState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocolVersion",
+        "spaceId",
+        "projectId",
+        "deviceId",
+        "worktreeId",
+        "membershipEpoch",
+        "worktreeEpoch",
+        "captureSeq",
+        "idempotencyKey",
+        "payloadDigest",
+        "capturedAt",
+        "objectFormat",
+        "head",
+        "commits",
+        "refs",
+        "captureState",
+        "stagingSummary",
+        "scopeDeclaration",
+        "contentManifest",
+        "content"
+      ],
+      "properties": {
+        "protocolVersion": {
+          "const": 1
+        },
+        "spaceId": {
+          "$ref": "../common.schema.json#/$defs/Id"
+        },
+        "projectId": {
+          "$ref": "../common.schema.json#/$defs/Id"
+        },
+        "deviceId": {
+          "$ref": "../common.schema.json#/$defs/Id"
+        },
+        "worktreeId": {
+          "$ref": "../common.schema.json#/$defs/Id"
+        },
+        "membershipEpoch": {
+          "$ref": "../common.schema.json#/$defs/PositiveSequence"
+        },
+        "worktreeEpoch": {
+          "$ref": "../common.schema.json#/$defs/PositiveSequence"
+        },
+        "captureSeq": {
+          "$ref": "../common.schema.json#/$defs/PositiveSequence"
+        },
+        "idempotencyKey": {
+          "$ref": "../common.schema.json#/$defs/Id"
+        },
+        "payloadDigest": {
+          "$ref": "../common.schema.json#/$defs/Sha256"
+        },
+        "capturedAt": {
+          "$ref": "../common.schema.json#/$defs/Timestamp"
+        },
+        "objectFormat": {
+          "type": "string",
+          "enum": [
+            "sha1",
+            "sha256"
+          ]
+        },
+        "head": {
+          "$ref": "#/$defs/Head"
+        },
+        "commits": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CommitMetadata"
+          }
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RefObservation"
+          }
+        },
+        "captureState": {
+          "$ref": "#/$defs/CaptureState"
+        },
+        "stagingSummary": {
+          "$ref": "#/$defs/StagingSummary"
+        },
+        "scopeDeclaration": {
+          "$ref": "#/$defs/ScopeDeclaration"
+        },
+        "contentManifest": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContentManifestEntry"
+          }
+        },
+        "content": {
+          "$ref": "#/$defs/ShareContent"
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "captureState": {
+              "type": "string",
+              "enum": [
+                "CHANGES",
+                "NO_SHARED_CHANGES"
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "captureState": {
+              "const": "CLEAN"
+            },
+            "content": {
+              "properties": {
+                "dataLevel": {
+                  "const": "METADATA_ONLY"
+                }
+              }
+            },
+            "stagingSummary": {
+              "properties": {
+                "staged": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Approved, repository-relative Git path. Omit hidden paths entirely, including exclusion reasons."
+                  },
+                  "maxItems": 0
+                },
+                "unstaged": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Approved, repository-relative Git path. Omit hidden paths entirely, including exclusion reasons."
+                  },
+                  "maxItems": 0
+                },
+                "untracked": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Approved, repository-relative Git path. Omit hidden paths entirely, including exclusion reasons."
+                  },
+                  "maxItems": 0
+                }
+              }
+            }
+          }
+        }
+      ],
+      "description": "Freeze this manifest and patch before scanning, final preview and confirmation. payloadDigest is lowercase SHA-256 of RFC 8785 canonical UTF-8 JSON of this entire object with only payloadDigest omitted. The patch descriptor binds the raw bytes. Retry the identical capture. Abort and reconfirm if inputs change. A dry run grants no upload permission. The server verifies digest, size, path scope and OID lengths for objectFormat. Only an independently observed clean index and worktree may use CLEAN; an empty shared patch is insufficient."
+    }
+  }
+}

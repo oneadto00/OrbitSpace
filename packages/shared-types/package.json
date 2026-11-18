@@ -1,0 +1,19 @@
+{
+  "name": "@orbitspace/shared-types",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": { "build": "node generate.mjs && tsc -p tsconfig.json" },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3",
+    "yaml": "2.9.1"
+  }
+}

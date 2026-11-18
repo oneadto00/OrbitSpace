@@ -1,0 +1,97 @@
+openapi: 3.1.1
+info:
+  title: OrbitSpace P1 — Common protocol
+  version: 1.0.0
+  description: All identifiers are opaque strings. Sequence numbers are safe JSON integers. Check ownership, role,
+    current membership and lifecycle before exposing data; use a request ID for errors.
+paths: {}
+components:
+  schemas:
+    Id: {$ref: ../common.schema.json#/$defs/Id}
+    Sequence: {$ref: ../common.schema.json#/$defs/Sequence}
+    PositiveSequence: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+    Timestamp: {$ref: ../common.schema.json#/$defs/Timestamp}
+    GitOid: {$ref: ../common.schema.json#/$defs/GitOid}
+    Sha256: {$ref: ../common.schema.json#/$defs/Sha256}
+    ErrorCode: {$ref: ../common.schema.json#/$defs/ErrorCode}
+    SpaceRole: {$ref: ../common.schema.json#/$defs/SpaceRole}
+    DataLevel: {$ref: ../common.schema.json#/$defs/DataLevel}
+    ContentManifestStatus: {$ref: ../common.schema.json#/$defs/ContentManifestStatus}
+    GitTrustState: {$ref: ../common.schema.json#/$defs/GitTrustState}
+    BaseKind: {$ref: ../common.schema.json#/$defs/BaseKind}
+    DiscussionStatus: {$ref: ../common.schema.json#/$defs/DiscussionStatus}
+    P1MessageKind: {$ref: ../common.schema.json#/$defs/P1MessageKind}
+    DeviceScope: {$ref: ../common.schema.json#/$defs/DeviceScope}
+    CardState: {$ref: ../common.schema.json#/$defs/CardState}
+    ApiError: {$ref: ../common.schema.json#/$defs/ApiError}
+  securitySchemes:
+    AccessToken:
+      type: http
+      scheme: bearer
+      description: Short-lived browser access token.
+    DeviceToken:
+      type: http
+      scheme: bearer
+      description: User/device/space/project/scopes/membership-epoch bound credential. Check revocation on every
+        operation.
+    RefreshCookie:
+      type: apiKey
+      in: cookie
+      name: orbit_refresh
+    CsrfHeader:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: Browser session-bound CSRF token. Validate against the cookie session.
+  parameters:
+    MemberEpoch:
+      name: X-Membership-Epoch
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/PositiveSequence'}
+      description: Obtained from the current space membership. Reject stale epochs before reads or writes.
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/Id'}
+      description: Scope to caller and operation. Replay the original outcome for the same payload. Reject changed
+        input with IDEMPOTENCY_CONFLICT.
+  responses:
+    Error:
+      description: Request failed; code is machine-readable. details contains safe structured context.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    Unauthorized:
+      description: Missing, expired or revoked credential.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    Forbidden:
+      description: Scope, role, current membership epoch, CSRF or resource authorization failed.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    Conflict:
+      description: Idempotency, active owner or ordering constraint failed. Inspect code.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    Gone:
+      description: Resource expired or purged.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    RateLimited:
+      description: Rate limit exceeded. Respect Retry-After.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+      headers:
+        Retry-After:
+          description: Seconds before retry.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 9007199254740991

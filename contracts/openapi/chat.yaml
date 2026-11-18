@@ -1,0 +1,381 @@
+openapi: 3.1.1
+info:
+  title: OrbitSpace P1 — Main room chat
+  version: 1.0.0
+  description: Each space has one main room. Check active membership, role, epoch, message/room ownership and
+    referenced resources on every path, including live sends. Reads are allowed from VIEWER and sends require
+    MEMBER or above. History seq and change eventSeq are independent; retain authoritative boundaries even across
+    legal sequence holes.
+security:
+  - AccessToken: []
+paths:
+  /api/v1/spaces/{spaceId}/chat:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    get:
+      operationId: getRoom
+      summary: Get room metadata, read baseline and synchronization bounds
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RoomInfo'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/chat/ws-ticket:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    post:
+      operationId: issueWsTicket
+      summary: Issue a short-lived, atomically consumable room ticket
+      description: Bind ticket to this user, login session, space, room and epoch. Connect to wsPath with only
+        the ticket query field. Validate Origin on upgrade and enforce size and rate limits. On revocation send
+        AUTH_REVOKED_CLOSE and close the socket.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [ticket, expiresAt, wsPath]
+                properties:
+                  ticket:
+                    type: string
+                    minLength: 32
+                    pattern: ^[A-Za-z0-9_-]+$
+                  expiresAt: {$ref: ../common.schema.json#/$defs/Timestamp}
+                  wsPath: {const: /ws/chat}
+          headers:
+            Cache-Control:
+              schema: {const: no-store}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/chat/messages:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    post:
+      operationId: sendMessage
+      summary: Persist a text, reply or immutable reference and return its ACK
+      description: Verify reply target and referenced immutable resource in the same space. Deduplicate by (roomId,
+        senderId, clientMsgId). Identical retry returns the original ACK. Changed payload conflicts. Under the
+        room lock allocate seq and eventSeq, write the message, event and outbox in one transaction. Return ACK
+        only after commit.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SendMessage'}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MessageAck'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+    get:
+      operationId: getMessageHistory
+      summary: Page authorized history by message sequence
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+        - name: beforeSeq
+          in: query
+          required: false
+          schema: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+          description: Exclusive upper bound; omit for newest.
+        - name: throughSeq
+          in: query
+          required: false
+          schema: {$ref: ../common.schema.json#/$defs/Sequence}
+          description: Inclusive snapshot ceiling used during resync.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+          description: Maximum rows in the page; default 50.
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HistoryPage'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/chat/events:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    get:
+      operationId: getRoomEvents
+      summary: Replay changes after the exclusive event cursor
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+        - name: afterEventSeq
+          in: query
+          required: true
+          schema: {$ref: ../common.schema.json#/$defs/Sequence}
+        - name: throughEventSeq
+          in: query
+          required: false
+          schema: {$ref: ../common.schema.json#/$defs/Sequence}
+          description: Optional inclusive high-water mark for a bounded replay.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+          description: Maximum rows in the page; default 50.
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EventPage'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '410':
+          description: Cursor is outside retention; reload history and current card state using the supplied reset
+            boundary.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ExpiredCursorError'}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/chat/read:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    put:
+      operationId: advanceLastRead
+      summary: Advance the read cursor for this membership epoch
+      description: Never regress or advance beyond the authorized maximum. Return the actual persisted position.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [lastReadSeq]
+              properties:
+                lastReadSeq: {$ref: ../common.schema.json#/$defs/Sequence}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [lastReadSeq]
+                properties:
+                  lastReadSeq: {$ref: ../common.schema.json#/$defs/Sequence}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/chat/messages/{messageId}/discussion:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+      - name: messageId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    put:
+      operationId: changeDiscussion
+      summary: Resolve or reopen a root discussion
+      description: Root author with write access, ADMIN or OWNER only. Validate conclusion message belongs to
+        this discussion. Commit status, monotonically increasing version, event and outbox together.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+        - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ChangeDiscussion'}
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Discussion'}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        '409': {$ref: ./common.yaml#/components/responses/Conflict}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+  /api/v1/spaces/{spaceId}/chat/cards/resolve:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema: {$ref: ./common.yaml#/components/schemas/Id}
+    post:
+      operationId: resolveResourceCards
+      summary: Resolve card previews against current grants and retention
+      description: Resolve by visible message in this room. A denied, expired or purged card carries only its
+        state. Never return an object-store URL or cached content for denied cards. Repeat on reconnect, display
+        and before opening a resource.
+      parameters:
+        - {$ref: ./common.yaml#/components/parameters/MemberEpoch}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [messageIds]
+              properties:
+                messageIds:
+                  type: array
+                  items: {$ref: ../common.schema.json#/$defs/Id}
+                  minItems: 1
+                  maxItems: 100
+                  uniqueItems: true
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/ResourceCardResult'}
+          headers:
+            Cache-Control:
+              schema: {const: no-store}
+        '401': {$ref: ./common.yaml#/components/responses/Unauthorized}
+        '403': {$ref: ./common.yaml#/components/responses/Forbidden}
+        default: {$ref: ./common.yaml#/components/responses/Error}
+components:
+  securitySchemes:
+    AccessToken: {$ref: ./common.yaml#/components/securitySchemes/AccessToken}
+  schemas:
+    SendMessage: {$ref: ../ws/chat-events.schema.json#/$defs/SendMessage}
+    ChatMessage: {$ref: ../ws/chat-events.schema.json#/$defs/ChatMessage}
+    MessageAck: {$ref: ../ws/chat-events.schema.json#/$defs/MessageAck}
+    Discussion: {$ref: ../ws/chat-events.schema.json#/$defs/Discussion}
+    CardView: {$ref: ../ws/chat-events.schema.json#/$defs/CardView}
+    RoomEvent: {$ref: ../ws/chat-events.schema.json#/$defs/RoomEvent}
+    WsEnvelope: {$ref: ../ws/ws-envelope.schema.json}
+    SyncBoundary:
+      type: object
+      additionalProperties: false
+      required: [maxSeq, maxEventSeq, minAfterEventSeq]
+      properties:
+        maxSeq: {$ref: ../common.schema.json#/$defs/Sequence}
+        maxEventSeq: {$ref: ../common.schema.json#/$defs/Sequence}
+        minAfterEventSeq: {$ref: ../common.schema.json#/$defs/Sequence}
+      description: Captured atomically. minAfterEventSeq is the oldest valid exclusive request cursor, including
+        zero when all events are retained.
+    RoomInfo:
+      type: object
+      additionalProperties: false
+      required: [spaceId, roomId, membershipEpoch, joinedBaselineSeq, lastReadSeq, boundary]
+      properties:
+        spaceId: {$ref: ../common.schema.json#/$defs/Id}
+        roomId: {$ref: ../common.schema.json#/$defs/Id}
+        membershipEpoch: {$ref: ../common.schema.json#/$defs/PositiveSequence}
+        joinedBaselineSeq: {$ref: ../common.schema.json#/$defs/Sequence}
+        lastReadSeq: {$ref: ../common.schema.json#/$defs/Sequence}
+        boundary: {$ref: '#/components/schemas/SyncBoundary'}
+    HistoryPage:
+      type: object
+      additionalProperties: false
+      required: [messages, nextBeforeSeq, boundary]
+      properties:
+        messages:
+          type: array
+          items: {$ref: '#/components/schemas/ChatMessage'}
+        nextBeforeSeq:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/PositiveSequence}
+            - {type: 'null'}
+        boundary: {$ref: '#/components/schemas/SyncBoundary'}
+      description: Newest-first, nextBeforeSeq is exclusive. null ends pagination. For resync pin throughSeq to
+        the original boundary.maxSeq and replay events after its maxEventSeq.
+    EventPage:
+      type: object
+      additionalProperties: false
+      required: [events, nextAfterEventSeq, hasMore, boundary]
+      properties:
+        events:
+          type: array
+          items: {$ref: '#/components/schemas/RoomEvent'}
+        nextAfterEventSeq: {$ref: ../common.schema.json#/$defs/Sequence}
+        hasMore: {type: boolean}
+        boundary: {$ref: '#/components/schemas/SyncBoundary'}
+      description: Ascending eventSeq. nextAfterEventSeq is the highest range position examined, even if no visible
+        event exists at that number. Advance only after applying the page. With no more events it equals the requested
+        or captured upper bound.
+    ExpiredCursorError:
+      type: object
+      additionalProperties: false
+      required: [code, message, requestId, details]
+      properties:
+        code: {const: WS_CURSOR_EXPIRED}
+        message:
+          type: string
+          minLength: 1
+        requestId: {$ref: ../common.schema.json#/$defs/Id}
+        details:
+          type: object
+          additionalProperties: false
+          required: [boundary, resumeAfterEventSeq]
+          properties:
+            boundary: {$ref: '#/components/schemas/SyncBoundary'}
+            resumeAfterEventSeq: {$ref: ../common.schema.json#/$defs/Sequence}
+          description: Reload authorized history through boundary.maxSeq and re-resolve visible cards, then replay
+            after resumeAfterEventSeq (= boundary.maxEventSeq at reset).
+    ChangeDiscussion:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: {$ref: ./common.yaml#/components/schemas/DiscussionStatus}
+        conclusionMsgId:
+          anyOf:
+            - {$ref: ../common.schema.json#/$defs/Id}
+            - {type: 'null'}
+    ResourceCardResult:
+      type: object
+      additionalProperties: false
+      required: [messageId, view]
+      properties:
+        messageId: {$ref: ../common.schema.json#/$defs/Id}
+        view: {$ref: '#/components/schemas/CardView'}

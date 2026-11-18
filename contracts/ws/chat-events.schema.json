@@ -1,0 +1,414 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RoomEvent",
+  "$ref": "#/$defs/RoomEvent",
+  "$defs": {
+    "ClientContent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "text"
+          ],
+          "properties": {
+            "kind": {
+              "const": "TEXT"
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8000
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "projectId",
+            "commitOid"
+          ],
+          "properties": {
+            "kind": {
+              "const": "COMMIT_REF"
+            },
+            "projectId": {
+              "$ref": "../common.schema.json#/$defs/Id"
+            },
+            "commitOid": {
+              "$ref": "../common.schema.json#/$defs/GitOid"
+            },
+            "purpose": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "projectId",
+            "snapshotId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "WIP_REF"
+            },
+            "projectId": {
+              "$ref": "../common.schema.json#/$defs/Id"
+            },
+            "snapshotId": {
+              "$ref": "../common.schema.json#/$defs/Id"
+            },
+            "purpose": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            }
+          }
+        }
+      ]
+    },
+    "SendMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clientMsgId",
+        "content"
+      ],
+      "properties": {
+        "clientMsgId": {
+          "$ref": "../common.schema.json#/$defs/Id"
+        },
+        "replyToMsgId": {
+          "$ref": "../common.schema.json#/$defs/Id"
+        },
+        "content": {
+          "$ref": "#/$defs/ClientContent"
+        }
+      }
+    },
+    "Discussion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "conclusionMsgId",
+        "version"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "../common.schema.json#/$defs/DiscussionStatus"
+        },
+        "conclusionMsgId": {
+          "anyOf": [
+            {
+              "$ref": "../common.schema.json#/$defs/Id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "$ref": "../common.schema.json#/$defs/PositiveSequence"
+        }
+      }
+    },
+    "ChatMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "roomId",
+        "messageId",
+        "seq",
+        "senderId",
+        "clientMsgId",
+        "createdAt",
+        "replyToMsgId",
+        "discussion",
+        "content"
+      ],
+      "properties": {
+        "roomId": {
+          "$ref": "../common.schema.json#/$defs/Id"
+        },
+        "messageId": {
+          "$ref": "../common.schema.json#/$defs/Id"
+        },
+        "seq": {
+          "$ref": "../common.schema.json#/$defs/PositiveSequence"
+        },
+        "senderId": {
+          "anyOf": [
+            {
+              "$ref": "../common.schema.json#/$defs/Id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "clientMsgId": {
+          "anyOf": [
+            {
+              "$ref": "../common.schema.json#/$defs/Id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdAt": {
+          "$ref": "../common.schema.json#/$defs/Timestamp"
+        },
+        "replyToMsgId": {
+          "anyOf": [
+            {
+              "$ref": "../common.schema.json#/$defs/Id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "discussion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Discussion"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "content": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ClientContent"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "text"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "SYSTEM"
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          ]
+        }
+      },
+      "description": "Root messages carry current discussion state; replies reference their parent. Server-generated resource previews are fetched separately under current authorization."
+    },
+    "MessageAck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "roomId",
+        "clientMsgId",
+        "messageId",
+        "seq",
+        "eventSeq"
+      ],
+      "properties": {
+        "roomId": {
+          "$ref": "../common.schema.json#/$defs/Id"
+        },
+        "clientMsgId": {
+          "$ref": "../common.schema.json#/$defs/Id"
+        },
+        "messageId": {
+          "$ref": "../common.schema.json#/$defs/Id"
+        },
+        "seq": {
+          "$ref": "../common.schema.json#/$defs/PositiveSequence"
+        },
+        "eventSeq": {
+          "$ref": "../common.schema.json#/$defs/PositiveSequence"
+        }
+      }
+    },
+    "CardView": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "label"
+          ],
+          "properties": {
+            "state": {
+              "const": "AVAILABLE"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state"
+          ],
+          "properties": {
+            "state": {
+              "type": "string",
+              "enum": [
+                "FORBIDDEN",
+                "EXPIRED_OR_DELETED",
+                "FORCE_PURGED"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "RoomEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "roomId",
+            "eventSeq",
+            "targetId",
+            "version",
+            "payload"
+          ],
+          "properties": {
+            "type": {
+              "const": "MESSAGE_CREATED"
+            },
+            "roomId": {
+              "$ref": "../common.schema.json#/$defs/Id"
+            },
+            "eventSeq": {
+              "$ref": "../common.schema.json#/$defs/PositiveSequence"
+            },
+            "targetId": {
+              "$ref": "../common.schema.json#/$defs/Id"
+            },
+            "version": {
+              "$ref": "../common.schema.json#/$defs/PositiveSequence"
+            },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "message"
+              ],
+              "properties": {
+                "message": {
+                  "$ref": "#/$defs/ChatMessage"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "roomId",
+            "eventSeq",
+            "targetId",
+            "version",
+            "payload"
+          ],
+          "properties": {
+            "type": {
+              "const": "DISCUSSION_STATUS_CHANGED"
+            },
+            "roomId": {
+              "$ref": "../common.schema.json#/$defs/Id"
+            },
+            "eventSeq": {
+              "$ref": "../common.schema.json#/$defs/PositiveSequence"
+            },
+            "targetId": {
+              "$ref": "../common.schema.json#/$defs/Id"
+            },
+            "version": {
+              "$ref": "../common.schema.json#/$defs/PositiveSequence"
+            },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "discussion"
+              ],
+              "properties": {
+                "discussion": {
+                  "$ref": "#/$defs/Discussion"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "roomId",
+            "eventSeq",
+            "targetId",
+            "version",
+            "payload"
+          ],
+          "properties": {
+            "type": {
+              "const": "RESOURCE_CARD_STATE_CHANGED"
+            },
+            "roomId": {
+              "$ref": "../common.schema.json#/$defs/Id"
+            },
+            "eventSeq": {
+              "$ref": "../common.schema.json#/$defs/PositiveSequence"
+            },
+            "targetId": {
+              "$ref": "../common.schema.json#/$defs/Id"
+            },
+            "version": {
+              "$ref": "../common.schema.json#/$defs/PositiveSequence"
+            },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "refreshRequired"
+              ],
+              "properties": {
+                "refreshRequired": {
+                  "const": true
+                }
+              },
+              "description": "Invalidate the cached preview and resolve current viewer-specific card state using the batch endpoint."
+            }
+          }
+        }
+      ],
+      "description": "eventSeq is the recoverable room event cursor. targetId identifies the affected message, version orders its changes. Deduplicate by room and eventSeq; never apply an older target version over a newer one."
+    }
+  }
+}
