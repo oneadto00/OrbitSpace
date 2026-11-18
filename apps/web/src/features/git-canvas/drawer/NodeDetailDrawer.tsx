@@ -5,6 +5,7 @@ import type {
   CommitObservation,
   ContentManifestEntry,
   DataLevel,
+  DiffEndpointRef,
   PatchDescriptor,
   ScopeDeclaration,
   SnapshotDetail,
@@ -14,6 +15,7 @@ import {
   Download,
   FileCode2,
   GitCommitHorizontal,
+  GitCompareArrows,
   GitPullRequestDraft,
   MessageSquareQuote,
   RefreshCw,
@@ -30,6 +32,7 @@ import {
   fetchRawPatch,
   fetchSnapshotDetail,
   gitCanvasErrorText,
+  makeIdempotencyKey,
   resolveResourceCardState,
   retrySnapshotParseJob,
 } from "../gitCanvasApi";
@@ -56,16 +59,10 @@ export interface NodeDetailDrawerProps {
   onClose: () => void;
   onQuoteToChat: GitWorkspaceSlotProps["onQuoteToChat"];
   onSnapshotUpdated?: () => void;
+  onAssignDiffEndpoint?: (role: "base" | "target", ref: DiffEndpointRef) => void;
 }
 
 const INITIAL_DIFF_LINE_LIMIT = 1500;
-
-function generateIdempotencyKey(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `retry-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
 
 function sortObservationsDesc(observations: CommitObservation[]): CommitObservation[] {
   return [...observations].sort((a, b) => {
@@ -277,7 +274,7 @@ function UnifiedPatchViewer({
       </div>
 
       <p className="drawer-hint">
-        P1 仅支持单次提交对所选父提交、或 WIP 对其基准 HEAD 的单点 Patch 查阅，不支持任意两点全量树 Diff。
+        当前为单点增量 Patch 视图（单次提交对其所选父提交、或 WIP 对其基准 HEAD）；如需比较任意两节点的文件树差异，请使用「双点 Diff 对比」。
       </p>
 
       {patch === null ? (
@@ -373,14 +370,15 @@ export function NodeDetailDrawer({
   onClose,
   onQuoteToChat,
   onSnapshotUpdated,
+  onAssignDiffEndpoint,
 }: NodeDetailDrawerProps) {
   const queryClient = useQueryClient();
   const [selectedParentOid, setSelectedParentOid] = useState<string | undefined>(undefined);
-  const retryKeyRef = useRef<string>(generateIdempotencyKey());
+  const retryKeyRef = useRef<string>(makeIdempotencyKey());
 
   useEffect(() => {
     setSelectedParentOid(undefined);
-    retryKeyRef.current = generateIdempotencyKey();
+    retryKeyRef.current = makeIdempotencyKey();
   }, [selected.kind, selected.id]);
 
   const commitQueryKey = [
@@ -426,7 +424,7 @@ export function NodeDetailDrawer({
       return result;
     },
     onSuccess: async () => {
-      retryKeyRef.current = generateIdempotencyKey();
+      retryKeyRef.current = makeIdempotencyKey();
       await queryClient.invalidateQueries({ queryKey: snapshotQueryKey });
       onSnapshotUpdated?.();
     },
@@ -516,6 +514,30 @@ export function NodeDetailDrawer({
       </header>
 
       <div className="drawer-body">
+        {onAssignDiffEndpoint && (
+          <div className="drawer-diff-jump-bar">
+            <span className="drawer-kv-label">
+              <GitCompareArrows size={13} /> 发起双点 Diff 对比：
+            </span>
+            <div className="drawer-diff-jump-actions">
+              <Button
+                className="secondary drawer-btn-sm"
+                onClick={() => onAssignDiffEndpoint("base", { kind: selected.kind, id: selected.id })}
+              >
+                设为旧端 Base
+              </Button>
+              <Button
+                className="secondary drawer-btn-sm"
+                onClick={() =>
+                  onAssignDiffEndpoint("target", { kind: selected.kind, id: selected.id })
+                }
+              >
+                设为新端 Target
+              </Button>
+            </div>
+          </div>
+        )}
+
         {isOutsideCurrentGraph && (
           <div className="drawer-callout drawer-callout-info" role="status">
             {selected.kind === "WIP"

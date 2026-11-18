@@ -2,10 +2,19 @@ import type {
   AccessSession,
   ApiError,
   CardState,
+  ChangeCodeCommentStatusRequest,
+  CodeCommentDto,
+  CodeCommentListResponse,
   CommitDetail,
+  CreateCodeCommentRequest,
+  CreateTwoPointDiffRequest,
+  ForwardCodeCommentRequest,
+  Member,
   ParseJob,
   ProjectGraph,
+  ReplyCodeCommentRequest,
   SnapshotDetail,
+  TwoPointDiffDto,
 } from "@orbitspace/shared-types";
 import { revokeSpace, spaceSignal, type SpaceAccess } from "../../shared/api/access";
 import {
@@ -22,6 +31,55 @@ const API_BASE = "/api/v1";
 export interface RawPatchPayload {
   buffer: ArrayBuffer;
   text: string;
+}
+
+/** Generates a fresh UUID idempotency key with fallback for constrained runtimes. */
+export function makeIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `idem-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** Copies text to clipboard with fallback for non-HTTPS local origins. */
+export async function copyTextToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fallback below
+  }
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    const ok = document.execCommand("copy");
+    textarea.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+function jsonPostInit(
+  value: unknown,
+  idempotencyKey: string,
+  signal?: AbortSignal,
+): RequestInit {
+  return {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Idempotency-Key": idempotencyKey,
+    },
+    body: JSON.stringify(value),
+    signal,
+  };
 }
 
 export function buildCommitDetailPath(
@@ -58,6 +116,136 @@ export function buildSnapshotPatchPath(
   snapshotId: string,
 ): string {
   return `/spaces/${encodeURIComponent(spaceId)}/projects/${encodeURIComponent(projectId)}/snapshots/${encodeURIComponent(snapshotId)}/patch`;
+}
+
+export function buildDiffsPath(spaceId: string, projectId: string): string {
+  return `/spaces/${encodeURIComponent(spaceId)}/projects/${encodeURIComponent(projectId)}/diffs`;
+}
+
+export function buildDiffDetailPath(
+  spaceId: string,
+  projectId: string,
+  diffId: string,
+): string {
+  return `${buildDiffsPath(spaceId, projectId)}/${encodeURIComponent(diffId)}`;
+}
+
+export function buildCodeCommentsPath(
+  spaceId: string,
+  projectId: string,
+  params?: { diffId?: string; path?: string },
+): string {
+  const base = `/spaces/${encodeURIComponent(spaceId)}/projects/${encodeURIComponent(projectId)}/code-comments`;
+  const qs = new URLSearchParams();
+  if (params?.diffId) qs.set("diffId", params.diffId);
+  if (params?.path) qs.set("path", params.path);
+  const suffix = qs.toString();
+  return suffix ? `${base}?${suffix}` : base;
+}
+
+export function fetchSpaceMembers(
+  spaceId: string,
+  access: SpaceAccess,
+  signal?: AbortSignal,
+): Promise<Member[]> {
+  return api<Member[]>(`/spaces/${encodeURIComponent(spaceId)}/members`, { signal }, access);
+}
+
+export function createTwoPointDiff(
+  spaceId: string,
+  projectId: string,
+  payload: CreateTwoPointDiffRequest,
+  access: SpaceAccess,
+  idempotencyKey: string,
+  signal?: AbortSignal,
+): Promise<TwoPointDiffDto> {
+  return api<TwoPointDiffDto>(
+    buildDiffsPath(spaceId, projectId),
+    jsonPostInit(payload, idempotencyKey, signal),
+    access,
+  );
+}
+
+export function getTwoPointDiff(
+  spaceId: string,
+  projectId: string,
+  diffId: string,
+  access: SpaceAccess,
+  signal?: AbortSignal,
+): Promise<TwoPointDiffDto> {
+  return api<TwoPointDiffDto>(
+    buildDiffDetailPath(spaceId, projectId, diffId),
+    { signal },
+    access,
+  );
+}
+
+export function listCodeComments(
+  spaceId: string,
+  projectId: string,
+  access: SpaceAccess,
+  params?: { diffId?: string; path?: string },
+  signal?: AbortSignal,
+): Promise<CodeCommentListResponse> {
+  return api<CodeCommentListResponse>(
+    buildCodeCommentsPath(spaceId, projectId, params),
+    { signal },
+    access,
+  );
+}
+
+export function createCodeComment(
+  spaceId: string,
+  projectId: string,
+  payload: CreateCodeCommentRequest,
+  access: SpaceAccess,
+  idempotencyKey: string,
+  signal?: AbortSignal,
+): Promise<CodeCommentDto> {
+  return api<CodeCommentDto>(
+    buildCodeCommentsPath(spaceId, projectId),
+    jsonPostInit(payload, idempotencyKey, signal),
+    access,
+  );
+}
+
+export function replyCodeComment(
+  spaceId: string,
+  projectId: string,
+  commentId: string,
+  payload: ReplyCodeCommentRequest,
+  access: SpaceAccess,
+  idempotencyKey: string,
+  signal?: AbortSignal,
+): Promise<CodeCommentDto> {
+  const path = `${buildCodeCommentsPath(spaceId, projectId)}/${encodeURIComponent(commentId)}/replies`;
+  return api<CodeCommentDto>(path, jsonPostInit(payload, idempotencyKey, signal), access);
+}
+
+export function changeCodeCommentDiscussion(
+  spaceId: string,
+  projectId: string,
+  commentId: string,
+  payload: ChangeCodeCommentStatusRequest,
+  access: SpaceAccess,
+  idempotencyKey: string,
+  signal?: AbortSignal,
+): Promise<CodeCommentDto> {
+  const path = `${buildCodeCommentsPath(spaceId, projectId)}/${encodeURIComponent(commentId)}/discussion`;
+  return api<CodeCommentDto>(path, jsonPostInit(payload, idempotencyKey, signal), access);
+}
+
+export function forwardCodeCommentToChat(
+  spaceId: string,
+  projectId: string,
+  commentId: string,
+  payload: ForwardCodeCommentRequest,
+  access: SpaceAccess,
+  idempotencyKey: string,
+  signal?: AbortSignal,
+): Promise<CodeCommentDto> {
+  const path = `${buildCodeCommentsPath(spaceId, projectId)}/${encodeURIComponent(commentId)}/forward-chat`;
+  return api<CodeCommentDto>(path, jsonPostInit(payload, idempotencyKey, signal), access);
 }
 
 export async function fetchProjectGraph(
@@ -231,12 +419,16 @@ export function gitCanvasErrorText(error: unknown): string {
   if (error instanceof HttpError) {
     switch (error.code) {
       case "RESOURCE_EXPIRED_OR_PURGED":
-        return "该快照或补丁已过期或已被清理。";
+        return "该快照、补丁或对比资源已过期或已被清理。";
+      case "RESOURCE_NOT_FOUND":
+        return "未找到对应的节点、对比差异或代码批注（可能已失效或无权访问）。";
       case "IDEMPOTENCY_CONFLICT":
         return "操作幂等键冲突，请刷新后重试。";
       case "WORKTREE_EPOCH_STALE":
       case "CAPTURE_SEQ_STALE":
         return "工作区采集序列已更新，请刷新画布查看最新状态。";
+      case "DIFF_DATA_INSUFFICIENT":
+        return "两端点共享内容或基础对象不足以计算完整差异，请按提示使用 orbit backfill 补传。";
       default:
         return errorText(error);
     }

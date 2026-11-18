@@ -728,6 +728,817 @@
   font-size: 0.78rem;
 }
 
+.drawer-badge-info {
+  background: #dbeafe;
+  color: #1e40af;
+  border-color: #93c5fd;
+}
+
+/* Two-point diff bar & drawer layout */
+.git-workspace-body.with-diff-drawer {
+  grid-template-columns: minmax(280px, 0.95fr) minmax(440px, 1.35fr);
+}
+
+.git-workspace-body.with-diff-drawer-wide {
+  grid-template-columns: minmax(200px, 0.5fr) minmax(560px, 2fr);
+}
+
+.git-compare-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #93c5fd;
+  border-radius: 10px;
+}
+
+.git-compare-bar-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.git-compare-bar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+.git-compare-slots {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.git-compare-slot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.git-compare-slot.is-awaiting {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px #2563eb26;
+}
+
+.git-compare-slot-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--ink, #172523);
+  cursor: pointer;
+}
+
+.git-compare-slot-val {
+  font-weight: 600;
+}
+
+.git-compare-slot select {
+  max-width: 240px;
+  min-height: 28px;
+  padding: 2px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fafbf8;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--ink, #172523);
+}
+
+.git-compare-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.drawer-diff-jump-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+}
+
+.drawer-diff-jump-bar .drawer-kv-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 0;
+  color: #075985;
+  font-weight: 600;
+}
+
+.drawer-diff-jump-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* TwoPointDiffDrawer */
+.diff-kind-pill {
+  color: #1e40af;
+}
+
+.diff-endpoints-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #bfdbfe;
+  background: #f8fafc;
+}
+
+.diff-endpoint-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.81rem;
+}
+
+.diff-role-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.diff-role-base {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.diff-role-target {
+  background: #ccfbf1;
+  color: #115e59;
+}
+
+.diff-endpoint-text {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.diff-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.diff-summary-cell {
+  padding: 8px 10px;
+  border: 1px solid var(--line, #d7dfd7);
+  border-radius: 8px;
+  background: #fafbf8;
+  font-size: 0.84rem;
+}
+
+.diff-insufficient-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.diff-backfill-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: #ffffff;
+  border: 1px solid #fcd34d;
+  color: var(--ink, #172523);
+}
+
+.diff-backfill-title {
+  font-size: 0.77rem;
+  font-weight: 650;
+}
+
+.diff-backfill-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.diff-backfill-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.diff-backfill-cmd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.diff-backfill-cmd code {
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: #172523;
+  color: #eef5ef;
+  font-size: 0.74rem;
+  overflow-wrap: anywhere;
+}
+
+.diff-backfill-role {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--muted, #566660);
+}
+
+.diff-unavailable-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.diff-file-filters {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.diff-file-search {
+  width: 100%;
+}
+
+.diff-file-search input {
+  min-width: 0;
+  width: 100%;
+}
+
+.diff-file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 210px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.diff-file-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--line, #d7dfd7);
+  border-radius: 8px;
+  background: #fcfdfb;
+  text-align: left;
+  cursor: pointer;
+}
+
+.diff-file-item:hover {
+  background: #f1f5f9;
+}
+
+.diff-file-item.is-selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.diff-file-item-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.diff-file-item-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.diff-file-path {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink, #172523);
+  word-break: break-all;
+}
+
+.diff-file-oldpath {
+  font-size: 0.74rem;
+  color: var(--muted, #566660);
+}
+
+.diff-file-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 0.72rem;
+  color: var(--muted, #566660);
+}
+
+.diff-evidence-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.diff-incomparable-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  color: #78350f;
+  font-size: 0.82rem;
+}
+
+.diff-incomparable-card p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.diff-symbols-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px 9px;
+  border: 1px solid var(--line, #d7dfd7);
+  border-radius: 7px;
+  background: #fafbf8;
+}
+
+.diff-symbols-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.diff-symbol-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: var(--ink, #172523);
+  font: inherit;
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.diff-symbol-chip:hover:not(:disabled) {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.diff-symbol-kind {
+  font-size: 0.7rem;
+  color: var(--muted, #566660);
+}
+
+.diff-patch-hint {
+  padding: 6px 10px;
+  background: #1e293b;
+  color: #cbd5e1;
+  border-bottom: 1px solid #334155;
+  font-size: 0.74rem;
+}
+
+.diff-line-dual {
+  display: grid;
+  grid-template-columns: 42px 42px minmax(0, 1fr) auto;
+  align-items: stretch;
+  white-space: pre;
+}
+
+.diff-line-dual:hover .diff-line-add-comment {
+  opacity: 1;
+}
+
+.diff-ln-btn {
+  border: none;
+  border-right: 1px solid #1e293b;
+  background: transparent;
+  color: #94a3b8;
+  font: inherit;
+  font-size: 0.72rem;
+  text-align: right;
+  padding: 0 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.diff-ln-btn:hover:not(:disabled) {
+  background: #334155;
+  color: #f8fafc;
+}
+
+.diff-ln-btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.diff-line-dual .diff-code {
+  padding: 0 8px;
+  overflow-x: visible;
+}
+
+.diff-line-gutter-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+}
+
+.diff-line-comment-badge {
+  border: 1px solid #60a5fa;
+  border-radius: 4px;
+  background: #1e3a8a;
+  color: #dbeafe;
+  font: inherit;
+  font-size: 0.68rem;
+  padding: 1px 5px;
+  cursor: pointer;
+}
+
+.diff-line-add-comment {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 0.68rem;
+  padding: 1px 5px;
+  opacity: 0.25;
+  cursor: pointer;
+}
+
+.diff-line-add-comment:hover,
+.diff-line-add-comment:focus-visible {
+  opacity: 1;
+  border-color: #60a5fa;
+  background: #1e3a8a;
+}
+
+@keyframes diffLineFlash {
+  0% {
+    background: #fef08a;
+    color: #0f172a;
+    box-shadow: inset 3px 0 #eab308;
+  }
+  45% {
+    background: #fde04788;
+    box-shadow: inset 3px 0 #eab308;
+  }
+  100% {
+    box-shadow: inset 3px 0 #eab308;
+  }
+}
+
+.diff-line-flash {
+  animation: diffLineFlash 1.5s ease-out forwards;
+  box-shadow: inset 3px 0 #eab308;
+}
+
+/* Code Comment Panel */
+.code-comment-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.comment-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.comment-composer-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #93c5fd;
+  background: #f8fafc;
+}
+
+.comment-composer-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.comment-anchor-pill {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.comment-anchor-pill span {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.comment-composer-coords {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.comment-coord-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--muted, #566660);
+}
+
+.comment-coord-field select,
+.comment-coord-field input {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid #bfcac1;
+  border-radius: 6px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--ink, #172523);
+}
+
+.comment-forward-check {
+  width: fit-content;
+}
+
+.comment-composer-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.comment-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.comment-tab-group {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 7px;
+  background: #edf2eb;
+}
+
+.comment-tab-btn {
+  border: none;
+  border-radius: 5px;
+  padding: 4px 9px;
+  background: transparent;
+  color: var(--muted, #566660);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.comment-tab-btn.is-active {
+  background: #ffffff;
+  color: var(--ink, #172523);
+  box-shadow: 0 1px 3px #17252314;
+}
+
+.comment-status-select {
+  min-height: 30px;
+  padding: 2px 8px;
+  border: 1px solid #bfcac1;
+  border-radius: 6px;
+  background: #fafbf8;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--ink, #172523);
+}
+
+.comment-empty-box {
+  padding: 12px;
+  border: 1px dashed var(--line, #d7dfd7);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  color: var(--muted, #566660);
+  text-align: center;
+}
+
+.comment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.comment-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line, #d7dfd7);
+  border-radius: 9px;
+  background: #fcfdfb;
+}
+
+.comment-card.is-resolved {
+  background: #f8faf9;
+  border-color: #cbd5e1;
+}
+
+@keyframes commentCardFlash {
+  0% {
+    box-shadow: 0 0 0 3px #eab308cc;
+    background: #fef9c3;
+  }
+  100% {
+    box-shadow: 0 0 0 2px #2563eb66;
+  }
+}
+
+.comment-card-focused {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px #2563eb66;
+  animation: commentCardFlash 1.2s ease-out;
+}
+
+.comment-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.comment-anchor-link {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 7px;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1e40af;
+  font: inherit;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+
+.comment-anchor-link:hover {
+  background: #dbeafe;
+}
+
+.comment-side-tag {
+  font-weight: 700;
+}
+
+.comment-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--muted, #566660);
+}
+
+.comment-thread-link-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.comment-body-text {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.comment-reply-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0 0 10px;
+  border-left: 2px solid #cbd5e1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.comment-reply-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.8rem;
+}
+
+.comment-reply-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.73rem;
+  color: var(--muted, #566660);
+}
+
+.comment-reply-body {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.comment-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.comment-conclusion-box {
+  padding: 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+}
+
+.comment-reply-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.comment-reply-form input {
+  flex: 1 1 180px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid #bfcac1;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 1120px) {
+  .git-workspace-body.with-diff-drawer,
+  .git-workspace-body.with-diff-drawer-wide {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 980px) {
   .git-workspace-body.with-drawer {
     grid-template-columns: 1fr;

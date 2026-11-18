@@ -30,6 +30,10 @@ export interface DagSvgCanvasProps {
   isComputing: boolean;
   selectedNodeKey: { kind: "COMMIT" | "WIP"; id: string } | null;
   focusHighlight?: { kind: "COMMIT" | "WIP"; id: string; nonce: number } | null;
+  compareEndpoints?: {
+    base: { kind: "COMMIT" | "WIP"; id: string } | null;
+    target: { kind: "COMMIT" | "WIP"; id: string } | null;
+  } | null;
   onSelectNode: (target: { kind: "COMMIT" | "WIP"; id: string }) => void;
 }
 
@@ -104,6 +108,7 @@ export function DagSvgCanvas({
   isComputing,
   selectedNodeKey,
   focusHighlight,
+  compareEndpoints,
   onSelectNode,
 }: DagSvgCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -518,6 +523,24 @@ export function DagSvgCanvas({
                 ((isCommit && focusHighlight.kind === "COMMIT" && focusHighlight.id === node.oid) ||
                   (isWip && focusHighlight.kind === "WIP" && focusHighlight.id === node.snapshotId));
 
+              const isCompareBase =
+                !!compareEndpoints?.base &&
+                ((isCommit &&
+                  compareEndpoints.base.kind === "COMMIT" &&
+                  compareEndpoints.base.id === node.oid) ||
+                  (isWip &&
+                    compareEndpoints.base.kind === "WIP" &&
+                    compareEndpoints.base.id === node.snapshotId));
+
+              const isCompareTarget =
+                !!compareEndpoints?.target &&
+                ((isCommit &&
+                  compareEndpoints.target.kind === "COMMIT" &&
+                  compareEndpoints.target.id === node.oid) ||
+                  (isWip &&
+                    compareEndpoints.target.kind === "WIP" &&
+                    compareEndpoints.target.id === node.snapshotId));
+
               const color = isWip
                 ? node.freshness === "ACTIVE"
                   ? "#0f766e"
@@ -530,6 +553,23 @@ export function DagSvgCanvas({
 
               // Compose dual-channel text badges cleanly without overlap
               const badges: Array<{ text: string; bg: string; fg: string; border: string; mono?: boolean }> = [];
+
+              if (isCompareBase) {
+                badges.push({
+                  text: "BASE 旧端",
+                  bg: "#dbeafe",
+                  fg: "#1e40af",
+                  border: "#60a5fa",
+                });
+              }
+              if (isCompareTarget) {
+                badges.push({
+                  text: "TARGET 新端",
+                  bg: "#ccfbf1",
+                  fg: "#115e59",
+                  border: "#2dd4bf",
+                });
+              }
 
               if (isCommit && node.oid) {
                 badges.push({
@@ -672,8 +712,8 @@ export function DagSvgCanvas({
                   onClick={isInteractive ? () => activateNode(node) : undefined}
                   onKeyDown={isInteractive ? (e) => handleNodeKeyDown(e, node) : undefined}
                 >
-                  {/* Row background selection / focus highlight */}
-                  {(isSelected || isFocused) && (
+                  {/* Row background selection / focus / two-point compare highlight */}
+                  {(isSelected || isFocused || isCompareBase || isCompareTarget) && (
                     <rect
                       key={isFocused && focusHighlight ? `row-${node.id}-${focusHighlight.nonce}` : `row-${node.id}`}
                       x={trackRight - 10}
@@ -681,10 +721,38 @@ export function DagSvgCanvas({
                       width={rowRectWidth}
                       height={52}
                       rx={8}
-                      fill={isSelected ? "#edf5ef" : "#fef9c3"}
-                      stroke={isSelected ? "#28634e" : "#eab308"}
-                      strokeWidth={isSelected ? 1.5 : 1.2}
+                      fill={
+                        isCompareBase
+                          ? "#eff6ff"
+                          : isCompareTarget
+                            ? "#f0fdfa"
+                            : isSelected
+                              ? "#edf5ef"
+                              : "#fef9c3"
+                      }
+                      stroke={
+                        isCompareBase
+                          ? "#2563eb"
+                          : isCompareTarget
+                            ? "#0d9488"
+                            : isSelected
+                              ? "#28634e"
+                              : "#eab308"
+                      }
+                      strokeWidth={isSelected || isCompareBase || isCompareTarget ? 1.5 : 1.2}
                       className={isFocused ? "dag-row-focus-pulse" : undefined}
+                    />
+                  )}
+
+                  {(isCompareBase || isCompareTarget) && (
+                    <circle
+                      cx={node.x}
+                      cy={node.y}
+                      r={13.5}
+                      fill="none"
+                      stroke={isCompareBase ? "#2563eb" : "#0d9488"}
+                      strokeWidth={2.2}
+                      strokeDasharray={isCompareBase ? undefined : "4 2"}
                     />
                   )}
 
