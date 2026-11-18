@@ -1,0 +1,2 @@
+org.springframework.boot.context.config.ConfigDataLocationResolver=\
+com.orbitspace.app.config.ModuleConfigLocationResolver

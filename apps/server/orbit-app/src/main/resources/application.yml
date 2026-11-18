@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: orbitspace
+  config:
+    import: "optional:classpath*:orbit-mod-*.yml"
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/orbitspace}
+    username: ${SPRING_DATASOURCE_USERNAME:orbitspace}
+    password: ${MYSQL_PASSWORD:local-only-app-password}
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+  mail:
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:1025}
+  flyway:
+    locations: classpath:db/migration
+    out-of-order: false
+    validate-on-migrate: true
+
+logging:
+  pattern:
+    level: "%5p [requestId=%X{requestId:-}]"
+
+orbit:
+  public-origin: ${ORBIT_PUBLIC_ORIGIN:https://localhost:8443}
+  s3:
+    endpoint: ${ORBIT_S3_ENDPOINT:http://localhost:9000}
+    bucket: ${ORBIT_S3_BUCKET:orbitspace-private}
+    access-key: ${ORBIT_S3_ACCESS_KEY:${MINIO_ROOT_USER:orbit-local}}
+    secret-key: ${ORBIT_S3_SECRET_KEY:${MINIO_ROOT_PASSWORD:local-only-minio-password}}
