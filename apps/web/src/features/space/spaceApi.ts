@@ -1,0 +1,270 @@
+import type {
+  ApiError,
+  CreateInvite,
+  ErrorCode,
+  GitProject,
+  Invite,
+  InviteRole,
+  Member,
+  SpaceDetail,
+  SpaceRole,
+  SpaceSummary,
+} from "@orbitspace/shared-types";
+import { queryClient, spacesKey, type SpaceAccess } from "../../shared/api/access";
+import { api, errorText, HttpError, jsonBody } from "../../shared/api/httpClient";
+
+export interface CreateSpaceInput {
+  name: string;
+  description?: string;
+  initialProjectName?: string;
+}
+
+export interface CreateInviteResult {
+  invite: Invite;
+  joinUrl: string;
+}
+
+export const SPACE_ROLE_LABELS: Record<SpaceRole, string> = {
+  OWNER: "所有者 (OWNER)",
+  ADMIN: "管理员 (ADMIN)",
+  MEMBER: "成员 (MEMBER)",
+  VIEWER: "只读 (VIEWER)",
+};
+
+const DOMAIN_ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
+  SPACE_SINGLE_OWNER_REQUIRED: "空间必须保留唯一 OWNER，请先将所有权转让给其他成员后再执行此操作。",
+  INVITE_UNAVAILABLE: "邀请链接无效、已过期、已撤销或已达到使用次数上限。",
+  IDEMPOTENCY_CONFLICT: "请求幂等键冲突（参数已变更），请刷新后重试。",
+  RESOURCE_EXPIRED_OR_PURGED: "目标资源已过期或已被清理。",
+  WS_CURSOR_EXPIRED: "实时同步游标已过期，正在重新拉取授权历史。",
+  WS_TICKET_INVALID: "实时聊天连接票据已失效，正在重新建立连接。",
+  INTERNAL_ERROR: "服务处理出现异常，请稍后重试。",
+};
+
+/** Generate a fresh UUID idempotency key with fallback for older runtimes. */
+export function makeIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `idem-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** Build a JSON RequestInit while preserving Content-Type alongside extra headers. */
+export function jsonRequest(
+  value: unknown,
+  method = "POST",
+  extraHeaders?: Record<string, string>,
+): RequestInit {
+  const base = jsonBody(value, method);
+  return {
+    ...base,
+    headers: {
+      "Content-Type": "application/json",
+      ...extraHeaders,
+    },
+  };
+}
+
+/** Format ISO timestamps consistently across Space and Chat views. */
+export function formatDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
+/** Copy text to clipboard with execCommand fallback for non-HTTPS local origins. */
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fallback below
+  }
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    const ok = document.execCommand("copy");
+    textarea.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Format an Error or structured WS ApiError into a safe user-facing Chinese message. */
+export function featureErrorText(
+  error: unknown,
+  overrides?: Partial<Record<ErrorCode, string>>,
+): string {
+  if (error instanceof HttpError && error.code) {
+    return overrides?.[error.code] ?? DOMAIN_ERROR_MESSAGES[error.code] ?? errorText(error);
+  }
+  return errorText(error);
+}
+
+/** Convert a structured WebSocket ApiError payload into a safe message via HttpError mapping. */
+export function apiPayloadErrorText(
+  payload: ApiError,
+  overrides?: Partial<Record<ErrorCode, string>>,
+): string {
+  return featureErrorText(
+    new HttpError(400, payload.code, payload.requestId, payload.details),
+    overrides,
+  );
+}
+
+export function upsertSpaceSummary(summary: SpaceSummary): void {
+  queryClient.setQueryData<SpaceSummary[]>(spacesKey, (prev) => {
+    if (!prev) return [summary];
+    const exists = prev.some((item) => item.spaceId === summary.spaceId);
+    return exists
+      ? prev.map((item) => (item.spaceId === summary.spaceId ? summary : item))
+      : [summary, ...prev];
+  });
+}
+
+export function buildCliQuickstart(projectId: string): string {
+  return [
+    "orbit login",
+    `orbit init --project ${projectId}`,
+    "orbit push-state --with-diff --dry-run",
+  ].join("\n");
+}
+
+export function listMySpaces(signal?: AbortSignal): Promise<SpaceSummary[]> {
+  return api<SpaceSummary[]>("/spaces", { signal });
+}
+
+export function createSpace(
+  payload: CreateSpaceInput,
+  idempotencyKey: string,
+): Promise<SpaceDetail> {
+  return api<SpaceDetail>(
+    "/spaces",
+    jsonRequest(payload, "POST", { "Idempotency-Key": idempotencyKey }),
+  );
+}
+
+export function getSpaceDetail(
+  spaceId: string,
+  access: SpaceAccess,
+  signal?: AbortSignal,
+): Promise<SpaceDetail> {
+  return api<SpaceDetail>(`/spaces/${encodeURIComponent(spaceId)}`, { signal }, access);
+}
+
+export function listSpaceMembers(
+  spaceId: string,
+  access: SpaceAccess,
+  signal?: AbortSignal,
+): Promise<Member[]> {
+  return api<Member[]>(`/spaces/${encodeURIComponent(spaceId)}/members`, { signal }, access);
+}
+
+export function listSpaceInvites(
+  spaceId: string,
+  access: SpaceAccess,
+  signal?: AbortSignal,
+): Promise<Invite[]> {
+  return api<Invite[]>(`/spaces/${encodeURIComponent(spaceId)}/invites`, { signal }, access);
+}
+
+export function createSpaceInvite(
+  spaceId: string,
+  access: SpaceAccess,
+  payload: CreateInvite,
+  idempotencyKey: string,
+): Promise<CreateInviteResult> {
+  return api<CreateInviteResult>(
+    `/spaces/${encodeURIComponent(spaceId)}/invites`,
+    jsonRequest(payload, "POST", { "Idempotency-Key": idempotencyKey }),
+    access,
+  );
+}
+
+export function revokeSpaceInvite(
+  spaceId: string,
+  inviteId: string,
+  access: SpaceAccess,
+): Promise<void> {
+  return api<void>(
+    `/spaces/${encodeURIComponent(spaceId)}/invites/${encodeURIComponent(inviteId)}`,
+    { method: "DELETE" },
+    access,
+  );
+}
+
+export function joinSpaceByToken(token: string, idempotencyKey: string): Promise<SpaceSummary> {
+  return api<SpaceSummary>(
+    "/space-invites/join",
+    jsonRequest({ token }, "POST", { "Idempotency-Key": idempotencyKey }),
+  );
+}
+
+export function changeSpaceMemberRole(
+  spaceId: string,
+  userId: string,
+  role: InviteRole,
+  access: SpaceAccess,
+): Promise<Member> {
+  return api<Member>(
+    `/spaces/${encodeURIComponent(spaceId)}/members/${encodeURIComponent(userId)}`,
+    jsonRequest({ role }, "PATCH"),
+    access,
+  );
+}
+
+export function removeSpaceMember(
+  spaceId: string,
+  userId: string,
+  access: SpaceAccess,
+): Promise<void> {
+  return api<void>(
+    `/spaces/${encodeURIComponent(spaceId)}/members/${encodeURIComponent(userId)}`,
+    { method: "DELETE" },
+    access,
+  );
+}
+
+export function transferSpaceOwnership(
+  spaceId: string,
+  newOwnerUserId: string,
+  access: SpaceAccess,
+  idempotencyKey: string,
+): Promise<void> {
+  return api<void>(
+    `/spaces/${encodeURIComponent(spaceId)}/owner`,
+    jsonRequest({ newOwnerUserId }, "PUT", { "Idempotency-Key": idempotencyKey }),
+    access,
+  );
+}
+
+export function leaveSpace(spaceId: string, access: SpaceAccess): Promise<void> {
+  return api<void>(
+    `/spaces/${encodeURIComponent(spaceId)}/leave`,
+    { method: "POST" },
+    access,
+  );
+}
+
+export function createGitProject(
+  spaceId: string,
+  name: string,
+  access: SpaceAccess,
+  idempotencyKey: string,
+): Promise<GitProject> {
+  return api<GitProject>(
+    `/spaces/${encodeURIComponent(spaceId)}/projects`,
+    jsonRequest({ name }, "POST", { "Idempotency-Key": idempotencyKey }),
+    access,
+  );
+}
