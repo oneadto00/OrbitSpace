@@ -37,6 +37,54 @@ export async function repository() {
 
 export interface Change { path: string; staged: boolean; unstaged: boolean; untracked: boolean }
 export interface Entry { mode: string; oid: string; sparse?: boolean }
+
+export function parseIndex(staged: Buffer) {
+  const index = new Map<string, Entry>();
+  let incompleteIndex = false;
+  for (const row of records(staged)) {
+    const sep = row.indexOf('\t');
+    const [tag, mode, hash] = row.slice(0, sep).split(' ');
+    index.set(row.slice(sep + 1), {mode: mode!, oid: hash!, sparse:tag?.toUpperCase() === 'S'});
+    if (tag !== 'H') incompleteIndex = true; // assume-unchanged, skip-worktree, conflict, etc.
+  }
+  return {index, incompleteIndex, indexHash:digest(staged)};
+}
+
+export function parseTree(tree: Buffer) {
+  const entries = new Map<string, Entry>();
+  for (const row of records(tree)) {
+    const sep = row.indexOf('\t');
+    const [mode,,hash] = row.slice(0, sep).split(' ');
+    entries.set(row.slice(sep + 1), {mode: mode!, oid: hash!});
+  }
+  return entries;
+}
+
+export async function readIndex(root: string) {
+  return parseIndex(await git(root, ['ls-files', '-v', '--stage', '-z']));
+}
+
+export async function commitTree(root: string, commitOid: string) {
+  const raw = await git(root, ['ls-tree', '-rz', '--full-tree', commitOid]);
+  return {entries: parseTree(raw), hash: digest(raw)};
+}
+
+export async function commitOidFor(root: string, rev: string): Promise<string | undefined> {
+  if (!rev || rev.startsWith('-') || rev.includes('\0')) return undefined;
+  const oid = oneLine(await git(root, ['rev-parse', '-q', '--verify', rev + '^{commit}'], [1]));
+  return /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(oid) ? oid : undefined;
+}
+
+export async function firstParentOid(root: string, commitOid: string): Promise<string | undefined> {
+  const oid = oneLine(await git(root, ['rev-parse', '-q', '--verify', commitOid + '^1'], [1]));
+  return /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(oid) ? oid : undefined;
+}
+
+export async function headCommitOid(root: string): Promise<string | undefined> {
+  const oid = oneLine(await git(root, ['rev-parse', '-q', '--verify', 'HEAD^{commit}'], [1]));
+  return /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(oid) ? oid : undefined;
+}
+
 export async function inventory(root: string, observedAt: string) {
   const [status, staged, symbolic, format, headBytes] = await Promise.all([
     git(root, ['status', '--porcelain=v1', '-z', '--no-renames', '--untracked-files=all', '--ignore-submodules=none']),
@@ -65,25 +113,13 @@ export async function inventory(root: string, observedAt: string) {
     byPath.set(path, change);
   }
   const changes = [...byPath.values()];
-  const index = new Map<string, Entry>();
-  let incompleteIndex = false;
-  for (const row of records(staged)) {
-    const sep = row.indexOf('\t');
-    const [tag, mode, hash] = row.slice(0, sep).split(' ');
-    index.set(row.slice(sep + 1), {mode: mode!, oid: hash!, sparse:tag?.toUpperCase() === 'S'});
-    if (tag !== 'H') incompleteIndex = true; // assume-unchanged, skip-worktree, conflict, etc.
-  }
+  const {index, incompleteIndex, indexHash} = parseIndex(staged);
   const [tree, log, refBytes] = await Promise.all([
     oid ? git(root, ['ls-tree', '-rz', '--full-tree', oid]) : Buffer.alloc(0),
     git(root, ['log', '--no-show-signature', '--max-count=256', '-z', '--format=%H%x00%P%x00%s%x00%an%x00%aI', '--branches', '--remotes', '--tags', ...(oid ? [oid] : []), '--']),
     git(root, ['for-each-ref', '--format=%(refname)%09%(objecttype)%09%(objectname)%09%(*objecttype)%09%(*objectname)', 'refs/heads', 'refs/remotes', 'refs/tags']),
   ]);
-  const base = new Map<string, Entry>();
-  for (const row of records(tree)) {
-    const sep = row.indexOf('\t');
-    const [mode,,hash] = row.slice(0, sep).split(' ');
-    base.set(row.slice(sep + 1), {mode: mode!, oid: hash!});
-  }
+  const base = parseTree(tree);
   const fields = records(log);
   const commits: PushState['commits'] = [];
   for (let i = 0; i < fields.length; i += 5) {
@@ -103,5 +139,5 @@ export async function inventory(root: string, observedAt: string) {
     const targetOid = type === 'commit' ? target : peeledType === 'commit' ? peeled : undefined;
     if (targetOid) refs.push({name: name!, targetOid, observedAt});
   }
-  return {changes, index, base, incompleteIndex, indexHash:digest(staged), objectFormat:objectFormat as PushState['objectFormat'], head, commits, refs};
+  return {changes, index, base, incompleteIndex, indexHash, objectFormat:objectFormat as PushState['objectFormat'], head, commits, refs};
 }

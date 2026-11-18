@@ -1,11 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { createInterface } from 'node:readline/promises';
 import { z } from 'zod';
 import { capture, type CaptureKey, type FrozenCapture } from '../payload/capture.js';
 import { printable } from '../privacy/policy.js';
 import { readState, write, credentialFor, worktreeSchema, seq } from '../state/local.js';
 import { initialize, projectRoute } from '../state/worktree.js';
-import { ApiError, request, retry, safeLink } from './api.js';
+import { ApiError, confirmConsent, request, retry, safeLink } from './api.js';
 
 function preview(frozen: FrozenCapture) {
   const {report:r, patch, body, warnings, skipped} = frozen;
@@ -25,13 +24,6 @@ function preview(frozen: FrozenCapture) {
   for (const warning of warnings) console.log('%s', warning);
   if (r.note) console.log('讨论说明 %s', printable(r.note));
   console.log('清单 %d 字节，Patch %d 字节，总计 %d 字节。摘要 %s', Buffer.byteLength(body), patch.length, Buffer.byteLength(body) + patch.length, r.payloadDigest);
-}
-
-async function consent() {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error('正式共享需要交互终端确认。使用 --dry-run 可仅预览。');
-  const reader = createInterface({input:process.stdin, output:process.stdout});
-  try { return (await reader.question('确认发送以上范围及所列未跟踪文件？输入 yes 继续：')).trim() === 'yes'; }
-  finally { reader.close(); }
 }
 
 export async function share(root: string, instance: string, file: string, options: {dryRun?: boolean; withDiff?: boolean; message?: string}) {
@@ -62,7 +54,7 @@ export async function share(root: string, instance: string, file: string, option
   }
   preview(frozen);
   if (options.dryRun || !state || !credential || !binding) return;
-  if (!(await consent())) { console.log('已取消共享。'); return; }
+  if (!(await confirmConsent('正式共享需要交互终端确认。使用 --dry-run 可仅预览。', '确认发送以上范围及所列未跟踪文件？输入 yes 继续：'))) { console.log('已取消共享。'); return; }
   const validate = async () => {
     const now = await collect();
     if (now.fingerprint !== frozen.fingerprint || now.body !== frozen.body || !now.patch.equals(frozen.patch)) {

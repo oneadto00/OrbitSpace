@@ -1,4 +1,5 @@
 import { hostname } from 'node:os';
+import { createInterface } from 'node:readline/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { printable } from '../privacy/policy.js';
@@ -16,8 +17,17 @@ export function serverOrigin(value: string): string {
 export class ApiError extends Error {
   constructor(readonly code: string, readonly status: number) { super('服务端返回 ' + code + ' (HTTP ' + status + ')'); }
 }
-export async function request(origin: string, path: string, method: string, body: string | URLSearchParams | Buffer, credential?: Credential, key?: string) {
+export async function request(
+  origin: string,
+  path: string,
+  method: string,
+  body: string | URLSearchParams | Buffer,
+  credential?: Credential,
+  key?: string,
+  extraHeaders?: Record<string, string>,
+) {
   const headers: Record<string,string> = {
+    ...extraHeaders,
     'Content-Type': Buffer.isBuffer(body) ? 'application/octet-stream' : typeof body === 'string' ? 'application/json' : 'application/x-www-form-urlencoded',
   };
   if (credential) {
@@ -81,4 +91,11 @@ export async function retry<T>(operation: (attempt: number) => Promise<T>) {
       await delay(500 * (2 ** attempt));
     }
   }
+}
+
+export async function confirmConsent(ttyError: string, prompt: string): Promise<boolean> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error(ttyError);
+  const reader = createInterface({ input: process.stdin, output: process.stdout });
+  try { return (await reader.question(prompt)).trim() === 'yes'; }
+  finally { reader.close(); }
 }

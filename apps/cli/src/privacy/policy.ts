@@ -18,6 +18,13 @@ export function privatePath(path: string): boolean {
   return /(?:^|\/)(?:\.env[^/]*|\.ssh|\.aws|\.gnupg|\.npmrc|\.netrc|\.gitcredentials|\.git-credentials|\.docker\/config\.json|credentials(?:\.[^/]+)?|id_(?:rsa|dsa|ed25519|ecdsa)(?:\.[^/]+)?|[^/]*\.(?:pem|key|p12|pfx|keystore))(?:\/|$)/i.test(path) || !!secretLine(path);
 }
 
+export function safeRelativePath(path: string): boolean {
+  if (!path || path.length > 1024 || path.startsWith('/') || path.endsWith('/') || path.includes('\0') || path.includes('//') || path.includes('\\')) {
+    return false;
+  }
+  return path.split('/').every(segment => segment.length > 0 && segment !== '.' && segment !== '..' && segment.toLowerCase() !== '.git');
+}
+
 export function printable(value: string): string {
   return JSON.stringify(value).replace(/[\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, ch => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0'));
 }

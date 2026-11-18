@@ -7,6 +7,7 @@ import { repository } from './git/repository.js';
 import { credentialFor, locked, readState, statePath } from './state/local.js';
 import { initialize } from './state/worktree.js';
 import { login, serverOrigin } from './transport/api.js';
+import { backfill } from './transport/backfill.js';
 import { share } from './transport/share.js';
 
 const cli = new Command().name('orbit').description('OrbitSpace 主动共享 CLI');
@@ -36,6 +37,13 @@ cli.command('push-state').description('预览或主动共享当前工作树状�
   .option('--dry-run', '仅在本地预览本次采集').option('--with-diff', '包括通过隐私过滤的 Patch')
   .option('-m, --message <note>', '附上讨论说明')
   .action(opts => inWorktree((root, key, file) => share(root, key, file, opts)));
+
+cli.command('backfill').description('检查缺失内容并在预览确认后受控补传对象')
+  .requiredOption('--target <commit-or-snapshot>', '目标提交 OID/引用或 WIP 快照 ID')
+  .option('--base <commit-or-snapshot>', '基准提交 OID/引用或 WIP 快照 ID（可选）')
+  .option('--project <project-id>', '工程 ID（默认使用当前工作树绑定的工程）')
+  .option('--dry-run', '仅在本地预览本次补传范围')
+  .action(opts => inWorktree((root, key, file) => backfill(root, key, file, origin(), opts)));
 
 try { await cli.parseAsync(); }
 catch (e) {
