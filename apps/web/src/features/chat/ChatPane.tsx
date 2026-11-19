@@ -50,7 +50,14 @@ import { useSpaceChat, type WsConnectionStatus } from "./useSpaceChat";
 
 export type ChatDraftQuote =
   | {
-      kind: "COMMIT_REF" | "WIP_REF";
+      kind: "COMMIT_REF";
+      projectId: string;
+      targetId: string;
+      title: string;
+      nonce: number;
+    }
+  | {
+      kind: "WIP_REF";
       projectId: string;
       targetId: string;
       title: string;

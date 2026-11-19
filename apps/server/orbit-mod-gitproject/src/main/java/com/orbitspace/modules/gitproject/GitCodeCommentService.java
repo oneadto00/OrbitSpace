@@ -448,7 +448,7 @@ public class GitCodeCommentService implements ResourceLifecycleHook {
                         args.put("rootMessageId", locked.discussionThreadId());
                         args.put(
                                 "clientMsgId",
-                                GitProjectUtils.normalizeKey64(
+                                GitProjectUtils.sha256Hex(
                                         "cc-reply:" + commentId + ":" + idempotencyKey));
                         args.put("bodyText", bodyText);
                         replyBridge.apply(args);
@@ -542,7 +542,7 @@ public class GitCodeCommentService implements ResourceLifecycleHook {
                                         epoch,
                                         req.status(),
                                         req.conclusionMsgId(),
-                                        GitProjectUtils.normalizeKey64(
+                                        GitProjectUtils.sha256Hex(
                                                 "cc-disc:" + commentId + ":" + idempotencyKey));
                         db.update(
                                 """
@@ -696,7 +696,7 @@ public class GitCodeCommentService implements ResourceLifecycleHook {
                                 args.put("rootMessageId", summary.rootMessageId());
                                 args.put(
                                         "clientMsgId",
-                                        GitProjectUtils.normalizeKey64(
+                                        GitProjectUtils.sha256Hex(
                                                 "cc-mirror:" + commentId + ":" + reply.messageId()));
                                 args.put("bodyText", reply.bodyText());
                                 replyBridge.apply(args);

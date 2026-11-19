@@ -156,12 +156,17 @@ public class GitTwoPointDiffService {
         CreateDiffInput canonicalInput =
                 new CreateDiffInput(spaceId, projectId, req.base(), req.target());
 
-        // Fast-path replay for repeated idempotency keys without duplicating storage staging.
+        WipDiffRow baseWip = requireEndpointAccessible(spaceId, projectId, req.base());
+        WipDiffRow targetWip = requireEndpointAccessible(spaceId, projectId, req.target());
+
+        // Fast-path replay for repeated idempotency keys after verifying endpoints are still live.
         if (idempotency.hasRecord("CREATE_TWO_POINT_DIFF", projectId, userId, idempotencyKey)) {
             return tx.execute(
                     status -> {
                         spaceAuth.requireMembership(spaceId, userId, epoch, SpaceRole.VIEWER);
                         projectScope.requireProjectInSpace(projectId, spaceId);
+                        requireEndpointAccessible(spaceId, projectId, req.base());
+                        requireEndpointAccessible(spaceId, projectId, req.target());
                         return idempotency.execute(
                                 "CREATE_TWO_POINT_DIFF",
                                 projectId,
@@ -175,9 +180,6 @@ public class GitTwoPointDiffService {
                                 });
                     });
         }
-
-        WipDiffRow baseWip = requireEndpointAccessible(spaceId, projectId, req.base());
-        WipDiffRow targetWip = requireEndpointAccessible(spaceId, projectId, req.target());
 
         ComputedDiff computed =
                 computeControlledDiff(
