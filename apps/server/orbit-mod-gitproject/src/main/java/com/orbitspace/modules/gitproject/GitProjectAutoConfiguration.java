@@ -3,6 +3,12 @@ package com.orbitspace.modules.gitproject;
 import static com.orbitspace.kernel.ModuleSecurityCustomizer.Access.ACCOUNT;
 import static com.orbitspace.kernel.ModuleSecurityCustomizer.Access.DEVICE;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.orbitspace.kernel.AsyncJobPort;
+import com.orbitspace.kernel.ObjectStoragePort;
+import org.springframework.jdbc.core.JdbcTemplate;
+import java.util.Map;
+import java.util.function.Function;
 import com.orbitspace.kernel.ModuleSecurityCustomizer;
 import com.orbitspace.kernel.ModuleSecurityCustomizer.Route;
 import com.orbitspace.kernel.RevocationLedgerPort;
@@ -19,6 +25,10 @@ import java.util.function.Consumer;
 /** Spring Boot auto-configuration for orbit-mod-gitproject routes, services, SPIs, and replay. */
 @AutoConfiguration
 @Import({
+    GitRemoteSourceService.class,
+    GitRemoteSourceController.class,
+    GitRemoteSecrets.class,
+    GitRemoteComparisonService.class,
     GitProjectIdempotencyStore.class,
     GitProjectScopeService.class,
     GitBackfillService.class,
@@ -34,6 +44,11 @@ public class GitProjectAutoConfiguration {
     ModuleSecurityCustomizer gitProjectRoutes() {
         return () ->
                 List.of(
+                        accountRoute("GET", GitRemoteSourceController.BASE),
+                        accountRoute("POST", GitRemoteSourceController.BASE),
+                        accountRoute("DELETE", GitRemoteSourceController.BASE + "/{sourceId}"),
+                        accountRoute("POST", GitRemoteSourceController.BASE + "/{sourceId}/sync"),
+                        accountRoute("GET", GitRemoteSourceController.BASE + "/{sourceId}/comparison"),
                         accountRoute("POST", "/api/v1/spaces/{spaceId}/projects"),
                         accountRoute("GET", "/api/v1/spaces/{spaceId}/projects/{projectId}/graph"),
                         accountRoute(
@@ -97,11 +112,24 @@ public class GitProjectAutoConfiguration {
                                 "/api/v1/cli/projects/{projectId}/backfill/sessions/{backfillId}/complete"));
     }
 
+    @Bean("remoteGitWorkerInput")
+    Function<AsyncJobPort.Job,Map<String,Object>> remoteGitWorkerInput(GitRemoteSourceService sources) {
+        return sources::workerInput;
+    }
+
+    @Bean("remoteGitResultTarget")
+    AsyncJobPort.ResultTarget remoteGitResultTarget(GitRemoteSourceService sources, JdbcTemplate db,
+                                                    ObjectStoragePort storage, ObjectMapper mapper) {
+        return new GitRemoteResultStore(sources, db, storage, mapper);
+    }
+
     @Bean("orbitReplayRESOURCE_FORCE_PURGE")
     Consumer<RevocationLedgerPort.Entry> orbitReplayResourceForcePurge(
-            GitProjectService gitProjects, PlatformTransactionManager transactionManager) {
+            GitProjectService gitProjects, GitRemoteSourceService sources, PlatformTransactionManager transactionManager) {
         TransactionTemplate tx = new TransactionTemplate(transactionManager);
-        return entry -> tx.executeWithoutResult(status -> gitProjects.replayResourceForcePurge(entry));
+        return entry -> tx.executeWithoutResult(status -> {
+            if (!sources.replay(entry)) gitProjects.replayResourceForcePurge(entry);
+        });
     }
 
     private static Route accountRoute(String method, String pathPattern) {

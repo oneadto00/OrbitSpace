@@ -25,7 +25,6 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 
 /** Persists and queries Git commit observations, ordered parents, conflict states, and refs. */
@@ -74,7 +73,7 @@ class GitDagObservationStore {
             sortedCommits.sort(Comparator.comparing(CommitMetadataDto::oid));
             for (CommitMetadataDto commit : sortedCommits) {
                 persistSingleCommit(
-                        projectId, objectFormat, deviceId, userId, observedTs, commit);
+                        projectId, objectFormat, deviceId, userId, observedTs, commit, null, null);
             }
         }
 
@@ -100,13 +99,18 @@ class GitDagObservationStore {
         }
     }
 
+    void persistVerifiedCommit(String projectId, String format, String sourceId, String owner,
+                               Timestamp syncedAt, CommitMetadataDto commit, String jobId) {
+        persistSingleCommit(projectId, format, null, owner, syncedAt, commit, sourceId, jobId);
+    }
+
     private void persistSingleCommit(
             String projectId,
             String objectFormat,
             String deviceId,
             String userId,
             Timestamp observedTs,
-            CommitMetadataDto commit) {
+            CommitMetadataDto commit, String remoteSourceId, String reachableJob) {
         db.update(
                 """
                 INSERT INTO git_commits(project_id, object_format, oid, trust_state, first_seen_at)
@@ -157,7 +161,7 @@ class GitDagObservationStore {
         List<ObservationDbRow> existing =
                 db.query(
                         """
-                        SELECT id, oid, device_id, user_id, observed_at, trust_state,
+                        SELECT id, oid, COALESCE(device_id,CONCAT('remote:',remote_source_id)), user_id, observed_at, trust_state,
                                subject, author_name, author_email, authored_at, parents_json
                         FROM git_object_observations
                         WHERE project_id = ? AND object_format = ? AND oid = ?
@@ -184,7 +188,7 @@ class GitDagObservationStore {
         boolean conflict = commitRow.trustState() == GitTrustState.CONFLICT;
         ObservationDbRow sameSourceRow = null;
         for (ObservationDbRow obs : existing) {
-            if (obs.deviceId().equals(deviceId) && obs.userId().equals(userId)) {
+            if (obs.deviceId().equals(remoteSourceId == null ? deviceId : "remote:" + remoteSourceId) && obs.userId().equals(userId)) {
                 sameSourceRow = obs;
             }
             if (observationDiffers(obs, commit, incomingAuthoredAt)) {
@@ -209,16 +213,20 @@ class GitDagObservationStore {
                     commit.oid());
         }
 
-        String obsTrust = conflict ? GitTrustState.CONFLICT.name() : GitTrustState.DECLARED.name();
+        if (!conflict && remoteSourceId != null && commitRow.trustState() == GitTrustState.DECLARED) {
+            db.update("UPDATE git_commits SET trust_state='VERIFIED' WHERE id=?", commitRow.id());
+        }
+        String obsTrust = conflict ? "CONFLICT" : (remoteSourceId == null ? "DECLARED" : "VERIFIED");
         if (sameSourceRow == null) {
             String parentsJson = GitProjectUtils.toJson(mapper, commit.parents());
             db.update(
                     """
                     INSERT INTO git_object_observations(
                         id, project_id, object_format, oid, device_id, user_id, observed_at,
-                        trust_state, subject, author_name, author_email, authored_at, parents_json
+                        trust_state, subject, author_name, author_email, authored_at, parents_json,
+                        remote_source_id, last_reachable_job_id
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON))
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?)
                     """,
                     GitProjectUtils.newId(),
                     projectId,
@@ -232,17 +240,17 @@ class GitDagObservationStore {
                     commit.authorName(),
                     commit.authorEmail(),
                     Timestamp.from(incomingAuthoredAt),
-                    parentsJson);
+                    parentsJson, remoteSourceId, reachableJob);
         } else {
             db.update(
                     """
                     UPDATE git_object_observations
-                    SET observed_at = GREATEST(observed_at, ?), trust_state = ?
+                    SET observed_at = GREATEST(observed_at, ?), trust_state = ?, last_reachable_job_id = ?
                     WHERE id = ?
                     """,
                     observedTs,
                     obsTrust,
-                    sameSourceRow.id());
+                    reachableJob, sameSourceRow.id());
         }
     }
 
@@ -250,7 +258,7 @@ class GitDagObservationStore {
             ObservationDbRow obs, CommitMetadataDto commit, Instant incomingAuthoredAt) {
         return !obs.subject().equals(commit.subject())
                 || !obs.authorName().equals(commit.authorName())
-                || !Objects.equals(obs.authorEmail(), commit.authorEmail())
+                || (obs.authorEmail() != null && commit.authorEmail() != null && !obs.authorEmail().equals(commit.authorEmail()))
                 || !obs.authoredAt().truncatedTo(ChronoUnit.MICROS).equals(incomingAuthoredAt)
                 || !obs.parents().equals(commit.parents());
     }
@@ -391,6 +399,10 @@ class GitDagObservationStore {
                 SELECT ref_name, target_oid, observed_at, device_id, user_id
                 FROM git_refs
                 WHERE project_id = ?
+                UNION ALL
+                SELECT r.ref_name,r.target_oid,r.synced_at,CONCAT('remote:',s.id),s.owner_user_id
+                FROM git_remote_refs r JOIN git_sources s ON s.id=r.source_id
+                WHERE s.project_id=? AND s.status='ACTIVE'
                 ORDER BY observed_at DESC, ref_name ASC, device_id ASC, user_id ASC
                 """,
                 (rs, i) -> {
@@ -399,7 +411,7 @@ class GitDagObservationStore {
                             new RefObservationDto(rs.getString(1), rs.getString(2), observedAt),
                             new ObservationSourceDto(rs.getString(4), rs.getString(5), observedAt));
                 },
-                projectId);
+                projectId, projectId);
     }
 
     private Map<String, List<ObservationDbRow>> loadObservationsByOid(
@@ -415,7 +427,7 @@ class GitDagObservationStore {
         List<ObservationDbRow> rows =
                 db.query(
                         """
-                        SELECT id, oid, device_id, user_id, observed_at, trust_state,
+                        SELECT id, oid, COALESCE(device_id,CONCAT('remote:',remote_source_id)), user_id, observed_at, trust_state,
                                subject, author_name, author_email, authored_at, parents_json
                         FROM git_object_observations
                         WHERE project_id = ? AND oid IN ("""
