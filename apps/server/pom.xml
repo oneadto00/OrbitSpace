@@ -25,11 +25,14 @@
         <module>orbit-mod-friendship</module>
         <module>orbit-mod-file</module>
         <module>orbit-mod-integration</module>
+        <module>orbit-mod-document</module>
         <module>orbit-app</module>
     </modules>
 
     <properties>
+        <!-- JCA AES/GCM and KeyStore use the Java 21 API. Key material is supplied outside the database. -->
         <java.version>21</java.version>
+        <spring-security.version>6.5.11</spring-security.version>
         <aws-sdk.version>2.59.3</aws-sdk.version>
         <jjwt.version>0.13.0</jjwt.version>
     </properties>
@@ -58,6 +61,11 @@
                 <groupId>io.jsonwebtoken</groupId>
                 <artifactId>jjwt-jackson</artifactId>
                 <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.security</groupId>
+                <artifactId>spring-security-crypto</artifactId>
+                <version>${spring-security.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.orbitspace</groupId>
@@ -107,6 +115,11 @@
             <dependency>
                 <groupId>com.orbitspace</groupId>
                 <artifactId>orbit-mod-integration</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.orbitspace</groupId>
+                <artifactId>orbit-mod-document</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

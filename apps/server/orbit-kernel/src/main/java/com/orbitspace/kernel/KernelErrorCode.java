@@ -26,7 +26,12 @@ public enum KernelErrorCode implements ErrorCode {
     SHARE_REVOKED(403, "The file share has been revoked."),
     DOWNLOAD_LIMIT_EXCEEDED(403, "The download limit for this share has been reached."),
     NOT_FRIENDS_FOR_AIRDROP(403, "Independent file airdrop requires an active friendship."),
-    DIFF_DATA_INSUFFICIENT(409, "Insufficient shared content to compute a deterministic diff.");
+    DIFF_DATA_INSUFFICIENT(409, "Insufficient shared content to compute a deterministic diff."),
+    REMOTE_URL_FORBIDDEN(400, "The remote Git URL is not permitted."),
+    SSRF_TARGET_BLOCKED(403, "The upstream destination is blocked."),
+    AI_DISABLED_IN_SPACE(403, "AI summaries are disabled in this space."),
+    DOC_ANCHOR_UNPERSISTED(409, "The selection has no confirmed durable version."),
+    COLLAB_REVOKED(403, "The collaboration session is no longer authorized.");
 
     private final int httpStatus;
     private final String defaultMessage;

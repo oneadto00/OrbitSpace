@@ -6,5 +6,7 @@ public enum MessageKind {
     WIP_REF,
     FILE_REF,
     CODE_COMMENT_REF,
-    SYSTEM
+    SYSTEM,
+    DOC_REF,
+    PDF_REF
 }

@@ -5,8 +5,8 @@ import java.util.Objects;
 public interface ResourceCardVerifierPort {
     /**
      * Resource card reference. targetId is the full Git OID for COMMIT_REF, the immutable snapshot
-     * ID for WIP_REF, the file or airdrop share ID for FILE_REF, and the comment ID for
-     * CODE_COMMENT_REF.
+     * ID for WIP_REF, the file or airdrop share ID for FILE_REF, and the space-scoped comment ID for
+     * CODE_COMMENT_REF, DOC_REF and PDF_REF. Only Git references need a project ID.
      */
     record Reference(MessageKind kind, String projectId, String targetId, GrantType grantType) {
         public Reference {
@@ -14,7 +14,8 @@ public interface ResourceCardVerifierPort {
             if (kind == MessageKind.TEXT || kind == MessageKind.SYSTEM) {
                 throw new IllegalArgumentException("Expected a resource card reference kind");
             }
-            if (kind != MessageKind.FILE_REF) {
+            if (kind == MessageKind.COMMIT_REF || kind == MessageKind.WIP_REF
+                    || kind == MessageKind.CODE_COMMENT_REF) {
                 Objects.requireNonNull(projectId);
             }
             Objects.requireNonNull(targetId);

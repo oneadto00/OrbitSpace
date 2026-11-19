@@ -1621,6 +1621,7 @@ public class ChatService
             case CODE_COMMENT_REF ->
                     new CodeCommentRefContent(refProjectId, refTargetId, refPurpose);
             case SYSTEM -> new SystemContent(bodyText);
+            case DOC_REF, PDF_REF -> throw new DomainException(KernelErrorCode.INVALID_REQUEST);
         };
 
         return new ChatMessage(
