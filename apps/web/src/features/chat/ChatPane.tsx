@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type {
   CardView,
-  ChatMessage,
+  DocumentInfo,
   GrantType,
   Member,
   ProjectSummary,
@@ -11,15 +11,19 @@ import type {
 import {
   AlertCircle,
   ArrowDown,
+  BookOpen,
   CheckCircle2,
   CircleDot,
   CornerDownRight,
   FileCode2,
+  FileText,
   Filter,
   FolderOpen,
   GitCommitHorizontal,
   GitPullRequestDraft,
   History,
+  ListTodo,
+  LocateFixed,
   MessageSquare,
   Paperclip,
   RefreshCw,
@@ -45,8 +49,18 @@ import {
   listSpaceMembers,
   makeIdempotencyKey,
 } from "../space/spaceApi";
-import { chatErrorText } from "./chatApi";
+import { chatErrorText, type P3ChatMessage } from "./chatApi";
+import {
+  ResolvedConclusionDraftModal,
+  type ResolvedDiscussionDraftInput,
+} from "./ResolvedConclusionDraftModal";
 import { useSpaceChat, type WsConnectionStatus } from "./useSpaceChat";
+
+export type ChatActiveResource =
+  | { kind: "PROJECT"; id: string; label: string }
+  | { kind: "DOCUMENT"; id: string; label: string }
+  | { kind: "PDF"; id: string; fileVersionId: string; label: string }
+  | { kind: "SPACE_FILES"; id: string | null; label: string };
 
 export type ChatDraftQuote =
   | {
@@ -78,7 +92,9 @@ export interface ChatPaneProps {
   isRevoked: boolean;
   currentUserId: string | null;
   projects: ProjectSummary[];
+  documents?: DocumentInfo[];
   activeProjectId: string | null;
+  activeResource?: ChatActiveResource | null;
   draftQuote: ChatDraftQuote | null;
   externalSyncNonce?: number;
   onClearDraftQuote: () => void;
@@ -100,13 +116,27 @@ export interface ChatPaneProps {
     grantType: GrantType;
     targetId: string;
   }) => void;
+  onOpenDocCard?: (target: {
+    documentId: string;
+    commentId: string;
+    persistedVersionId: string;
+    view: "CURRENT" | "QUOTED_VERSION";
+  }) => void;
+  onOpenPdfCard?: (target: {
+    fileId: string;
+    fileVersionId: string;
+    commentId: string;
+    pageNumber: number;
+  }) => void;
+  onTodoDraftCommitted?: (documentId: string, title: string) => void;
+  onMessagesSnapshot?: (messages: P3ChatMessage[]) => void;
 }
 
 function shortId(value: string): string {
   return value.length > 10 ? value.slice(0, 8) : value;
 }
 
-function messageSnippet(msg: ChatMessage, cardView?: CardView): string {
+function messageSnippet(msg: P3ChatMessage, cardView?: CardView): string {
   switch (msg.content.kind) {
     case "TEXT":
       return msg.content.text.length > 56
@@ -146,6 +176,22 @@ function messageSnippet(msg: ChatMessage, cardView?: CardView): string {
         return `[代码批注] ${cardView.label}`;
       }
       return `[代码批注] ${msg.content.purpose ?? "行级批注"}`;
+    case "DOC_REF":
+      if (cardView && cardView.state !== "AVAILABLE") {
+        return "[文档引用不可用]";
+      }
+      if (cardView?.state === "AVAILABLE") {
+        return `[文档引用] ${cardView.label}`;
+      }
+      return `[文档引用] ${msg.content.purpose ?? "协作文档选区"}`;
+    case "PDF_REF":
+      if (cardView && cardView.state !== "AVAILABLE") {
+        return "[PDF 引用不可用]";
+      }
+      if (cardView?.state === "AVAILABLE") {
+        return `[PDF 第${msg.content.pageNumber}页] ${cardView.label}`;
+      }
+      return `[PDF 第${msg.content.pageNumber}页] ${msg.content.purpose ?? "PDF 选区"}`;
   }
 }
 
@@ -171,7 +217,9 @@ export function ChatPane({
   isRevoked,
   currentUserId,
   projects,
+  documents = [],
   activeProjectId,
+  activeResource = null,
   draftQuote,
   externalSyncNonce = 0,
   onClearDraftQuote,
@@ -179,6 +227,10 @@ export function ChatPane({
   onOpenResourceCard,
   onOpenCodeCommentCard,
   onOpenFileCard,
+  onOpenDocCard,
+  onOpenPdfCard,
+  onTodoDraftCommitted,
+  onMessagesSnapshot,
 }: ChatPaneProps) {
   const canSend = canUploadOrManage(spaceRole);
   const isOwnerOrAdmin = canManageSpace(spaceRole);
@@ -261,8 +313,16 @@ export function ChatPane({
     return map;
   }, [projects]);
 
+  const documentsById = useMemo(() => {
+    const map = new Map<string, DocumentInfo>();
+    for (const doc of documents) {
+      map.set(doc.documentId, doc);
+    }
+    return map;
+  }, [documents]);
+
   const messagesById = useMemo(() => {
-    const map = new Map<string, ChatMessage>();
+    const map = new Map<string, P3ChatMessage>();
     for (const m of messages) {
       map.set(m.messageId, m);
     }
@@ -270,7 +330,7 @@ export function ChatPane({
   }, [messages]);
 
   const repliesByRootId = useMemo(() => {
-    const map = new Map<string, ChatMessage[]>();
+    const map = new Map<string, P3ChatMessage[]>();
     for (const m of messages) {
       if (m.replyToMsgId) {
         const list = map.get(m.replyToMsgId) ?? [];
@@ -281,7 +341,7 @@ export function ChatPane({
     return map;
   }, [messages]);
 
-  const [filterByActiveProject, setFilterByActiveProject] = useState(false);
+  const [filterByActiveResource, setFilterByActiveResource] = useState(false);
   const [composerText, setComposerText] = useState("");
   const [replyTargetId, setReplyTargetId] = useState<string | null>(null);
   const [resolvingDiscussionMsgId, setResolvingDiscussionMsgId] = useState<string | null>(
@@ -293,6 +353,13 @@ export function ChatPane({
   const [cardActionError, setCardActionError] = useState<string | null>(null);
   const [openingCardId, setOpeningCardId] = useState<string | null>(null);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const [todoDraftInput, setTodoDraftInput] = useState<ResolvedDiscussionDraftInput | null>(
+    null,
+  );
+
+  useEffect(() => {
+    onMessagesSnapshot?.(messages);
+  }, [messages, onMessagesSnapshot]);
 
   const listRef = useRef<HTMLDivElement>(null);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
@@ -374,18 +441,58 @@ export function ChatPane({
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
+  const resolvedActiveResource: ChatActiveResource | null = useMemo(() => {
+    if (activeResource) return activeResource;
+    if (activeProjectId) {
+      return {
+        kind: "PROJECT",
+        id: activeProjectId,
+        label: projectsById.get(activeProjectId)?.name ?? shortId(activeProjectId),
+      };
+    }
+    return null;
+  }, [activeProjectId, activeResource, projectsById]);
+
   const visibleMessages = useMemo(() => {
-    if (!filterByActiveProject || !activeProjectId) {
+    if (!filterByActiveResource || !resolvedActiveResource) {
       return messages;
     }
     const matchingRootIds = new Set<string>();
     for (const msg of messages) {
-      if (
-        (msg.content.kind === "COMMIT_REF" ||
-          msg.content.kind === "WIP_REF" ||
-          msg.content.kind === "CODE_COMMENT_REF") &&
-        msg.content.projectId === activeProjectId
-      ) {
+      let matches = false;
+      if (resolvedActiveResource.kind === "PROJECT") {
+        matches =
+          (msg.content.kind === "COMMIT_REF" ||
+            msg.content.kind === "WIP_REF" ||
+            msg.content.kind === "CODE_COMMENT_REF") &&
+          msg.content.projectId === resolvedActiveResource.id;
+      } else if (resolvedActiveResource.kind === "DOCUMENT") {
+        matches =
+          msg.content.kind === "DOC_REF" &&
+          msg.content.documentId === resolvedActiveResource.id;
+      } else if (resolvedActiveResource.kind === "PDF") {
+        matches =
+          (msg.content.kind === "PDF_REF" &&
+            msg.content.fileId === resolvedActiveResource.id) ||
+          (msg.content.kind === "FILE_REF" &&
+            msg.content.grantType === "SPACE_FILE" &&
+            msg.content.targetId === resolvedActiveResource.id);
+      } else if (resolvedActiveResource.kind === "SPACE_FILES") {
+        if (resolvedActiveResource.id) {
+          matches =
+            (msg.content.kind === "FILE_REF" &&
+              msg.content.grantType === "SPACE_FILE" &&
+              msg.content.targetId === resolvedActiveResource.id) ||
+            (msg.content.kind === "PDF_REF" &&
+              msg.content.fileId === resolvedActiveResource.id);
+        } else {
+          matches =
+            (msg.content.kind === "FILE_REF" &&
+              msg.content.grantType === "SPACE_FILE") ||
+            msg.content.kind === "PDF_REF";
+        }
+      }
+      if (matches) {
         matchingRootIds.add(msg.replyToMsgId ?? msg.messageId);
       }
     }
@@ -394,7 +501,7 @@ export function ChatPane({
       if (msg.replyToMsgId && matchingRootIds.has(msg.replyToMsgId)) return true;
       return false;
     });
-  }, [activeProjectId, filterByActiveProject, messages]);
+  }, [filterByActiveResource, messages, resolvedActiveResource]);
 
   const replyTarget = replyTargetId ? messagesById.get(replyTargetId) ?? null : null;
 
@@ -407,7 +514,7 @@ export function ChatPane({
     return membersById.get(senderId)?.displayName ?? `成员 ${shortId(senderId)}`;
   };
 
-  const canControlDiscussion = (msg: ChatMessage): boolean => {
+  const canControlDiscussion = (msg: P3ChatMessage): boolean => {
     if (msg.replyToMsgId !== null || msg.discussion === null) return false;
     if (isOwnerOrAdmin) return true;
     return Boolean(currentUserId && msg.senderId === currentUserId && canSend);
@@ -492,12 +599,13 @@ export function ChatPane({
     await submitComposer();
   };
 
-  const handleOpenCard = async (msg: ChatMessage) => {
+  const handleOpenCard = async (msg: P3ChatMessage) => {
     if (
       msg.content.kind !== "COMMIT_REF" &&
       msg.content.kind !== "WIP_REF" &&
       msg.content.kind !== "FILE_REF" &&
-      msg.content.kind !== "CODE_COMMENT_REF"
+      msg.content.kind !== "CODE_COMMENT_REF" &&
+      msg.content.kind !== "PDF_REF"
     ) {
       return;
     }
@@ -536,7 +644,43 @@ export function ChatPane({
           grantType: msg.content.grantType,
           targetId: msg.content.targetId,
         });
+      } else if (msg.content.kind === "PDF_REF") {
+        onOpenPdfCard?.({
+          fileId: msg.content.fileId,
+          fileVersionId: msg.content.fileVersionId,
+          commentId: msg.content.commentId,
+          pageNumber: msg.content.pageNumber,
+        });
       }
+    } finally {
+      setOpeningCardId(null);
+    }
+  };
+
+  const handleOpenDocCard = async (
+    msg: P3ChatMessage,
+    view: "CURRENT" | "QUOTED_VERSION",
+  ) => {
+    if (msg.content.kind !== "DOC_REF") return;
+    setCardActionError(null);
+    setOpeningCardId(msg.messageId);
+    try {
+      const freshView = await resolveCardForOpen(msg.messageId);
+      if (!freshView) return;
+      if (freshView.state !== "AVAILABLE") {
+        setCardActionError(
+          freshView.state === "FORBIDDEN"
+            ? "无访问权限：当前账号无权查看该协作文档引用。"
+            : "该协作文档或引用版本已删除、过期或被清除，已更新卡片状态。",
+        );
+        return;
+      }
+      onOpenDocCard?.({
+        documentId: msg.content.documentId,
+        commentId: msg.content.commentId,
+        persistedVersionId: msg.content.persistedVersionId,
+        view,
+      });
     } finally {
       setOpeningCardId(null);
     }
@@ -585,9 +729,16 @@ export function ChatPane({
   }
 
   const wsBadge = wsStatusBadge(wsStatus);
-  const activeProjectName = activeProjectId
-    ? projectsById.get(activeProjectId)?.name ?? shortId(activeProjectId)
-    : null;
+  const activeResourceKindLabel =
+    resolvedActiveResource?.kind === "PROJECT"
+      ? "工程"
+      : resolvedActiveResource?.kind === "DOCUMENT"
+        ? "文档"
+        : resolvedActiveResource?.kind === "PDF"
+          ? "PDF"
+          : resolvedActiveResource?.kind === "SPACE_FILES"
+            ? "文件"
+            : null;
 
   return (
     <aside className="chat-pane" aria-label="空间唯一主群聊">
@@ -622,20 +773,22 @@ export function ChatPane({
           <label className="chat-project-filter-toggle">
             <input
               type="checkbox"
-              checked={filterByActiveProject}
-              disabled={!activeProjectId}
-              onChange={(e) => setFilterByActiveProject(e.target.checked)}
+              checked={filterByActiveResource}
+              disabled={!resolvedActiveResource}
+              onChange={(e) => setFilterByActiveResource(e.target.checked)}
             />
             <Filter size={13} />
-            <span>仅筛选当前工程讨论</span>
-            {filterByActiveProject && activeProjectName && (
-              <span className="chat-filter-project-tag">{activeProjectName}</span>
+            <span>仅筛选当前资源讨论</span>
+            {resolvedActiveResource && activeResourceKindLabel && (
+              <span className="chat-filter-project-tag">
+                {activeResourceKindLabel}：{resolvedActiveResource.label}
+              </span>
             )}
           </label>
         </div>
 
         <p className="chat-discussion-disclaimer">
-          讨论仅围绕本空间主群聊展开；标记已处理不代表代码已合并。
+          切换工程、文档、PDF 或文件区时右侧始终保持唯一空间主群聊；标记已处理不代表代码已合并。
         </p>
       </header>
 
@@ -700,18 +853,18 @@ export function ChatPane({
 
           {!loadingInitial && !initialError && visibleMessages.length === 0 && (
             <div className="chat-empty-state">
-              {filterByActiveProject ? (
+              {filterByActiveResource ? (
                 <>
-                  <p>当前工程下暂无关联讨论卡片。</p>
+                  <p>当前查看的资源下暂无关联讨论卡片。</p>
                   <Button
                     className="secondary workbench-btn-xs"
-                    onClick={() => setFilterByActiveProject(false)}
+                    onClick={() => setFilterByActiveResource(false)}
                   >
                     显示全部空间讨论
                   </Button>
                 </>
               ) : (
-                <p>空间主群聊暂无消息。你可以发送讨论文本，或在 Git 拓扑节点中点击「引用到群聊」。</p>
+                <p>空间主群聊暂无消息。你可以发送讨论文本，或在 Git 节点、协作文档、PDF 中引用内容到主群聊。</p>
               )}
             </div>
           )}
@@ -1007,6 +1160,147 @@ export function ChatPane({
                   </div>
                 )}
 
+                {msg.content.kind === "DOC_REF" && (
+                  <div className="chat-resource-block">
+                    {isDeniedCard && cardView && cardView.state !== "AVAILABLE" ? (
+                      <ResourceStateCard state={cardView.state} />
+                    ) : (
+                      <>
+                        {msg.content.purpose && (
+                          <p className="chat-msg-text">{msg.content.purpose}</p>
+                        )}
+                        {cardView?.state === "AVAILABLE" ? (
+                          <div className="chat-resource-card-box is-doc-card">
+                            <div className="chat-resource-card-top">
+                              <span className="chat-resource-kind">
+                                <FileText size={14} />
+                                协作文档引用
+                              </span>
+                              <span className="chat-resource-project">
+                                {documentsById.get(msg.content.documentId)?.title ??
+                                  `文档 ${shortId(msg.content.documentId)}`}
+                              </span>
+                            </div>
+                            <blockquote className="chat-doc-quote-excerpt">
+                              {cardView.label}
+                            </blockquote>
+                            <div className="chat-resource-card-foot">
+                              <code>
+                                固化版本 #{shortId(msg.content.persistedVersionId)}
+                              </code>
+                              <span>
+                                {openingCardId === msg.messageId
+                                  ? "正在校验权限…"
+                                  : isCardResolving
+                                    ? "正在刷新…"
+                                    : "双入口定位"}
+                              </span>
+                            </div>
+                            <div className="chat-doc-dual-actions">
+                              <Button
+                                className="primary workbench-btn-xs"
+                                disabled={openingCardId === msg.messageId}
+                                onClick={() => {
+                                  void handleOpenDocCard(msg, "CURRENT");
+                                }}
+                              >
+                                <LocateFixed size={12} /> 查看当前位置
+                              </Button>
+                              <Button
+                                className="secondary workbench-btn-xs"
+                                disabled={openingCardId === msg.messageId}
+                                onClick={() => {
+                                  void handleOpenDocCard(msg, "QUOTED_VERSION");
+                                }}
+                              >
+                                <History size={12} /> 查看引用时内容
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="chat-card-pending-box">
+                            <span>正在校验协作文档引用访问权限…</span>
+                            {!isCardResolving && (
+                              <Button
+                                className="secondary workbench-btn-xs"
+                                onClick={() => {
+                                  void resolveCardForOpen(msg.messageId);
+                                }}
+                              >
+                                重新解析
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {msg.content.kind === "PDF_REF" && (
+                  <div className="chat-resource-block">
+                    {isDeniedCard && cardView && cardView.state !== "AVAILABLE" ? (
+                      <ResourceStateCard state={cardView.state} />
+                    ) : (
+                      <>
+                        {msg.content.purpose && (
+                          <p className="chat-msg-text">{msg.content.purpose}</p>
+                        )}
+                        {cardView?.state === "AVAILABLE" ? (
+                          <button
+                            type="button"
+                            className="chat-resource-card-btn is-pdf-card"
+                            disabled={openingCardId === msg.messageId}
+                            onClick={() => {
+                              void handleOpenCard(msg);
+                            }}
+                          >
+                            <div className="chat-resource-card-top">
+                              <span className="chat-resource-kind">
+                                <BookOpen size={14} />
+                                PDF 资料选区
+                              </span>
+                              <span className="chat-resource-project">
+                                第 {msg.content.pageNumber} 页
+                              </span>
+                            </div>
+                            <strong className="chat-resource-label">
+                              {cardView.label}
+                            </strong>
+                            <div className="chat-resource-card-foot">
+                              <code>
+                                文件 {shortId(msg.content.fileId)} · 版本{" "}
+                                {shortId(msg.content.fileVersionId)}
+                              </code>
+                              <span>
+                                {openingCardId === msg.messageId
+                                  ? "正在校验权限…"
+                                  : isCardResolving
+                                    ? "正在刷新…"
+                                    : "打开 PDF 并高亮选区 →"}
+                              </span>
+                            </div>
+                          </button>
+                        ) : (
+                          <div className="chat-card-pending-box">
+                            <span>正在校验 PDF 引用访问权限…</span>
+                            {!isCardResolving && (
+                              <Button
+                                className="secondary workbench-btn-xs"
+                                onClick={() => {
+                                  void resolveCardForOpen(msg.messageId);
+                                }}
+                              >
+                                重新解析
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
                 {msg.discussion && (
                   <div className="chat-discussion-bar">
                     <div className="chat-discussion-status-row">
@@ -1144,6 +1438,36 @@ export function ChatPane({
                       重新打开
                     </button>
                   )}
+
+                  {canSend &&
+                    msg.replyToMsgId === null &&
+                    msg.discussion?.status === "RESOLVED" &&
+                    access && (
+                      <button
+                        type="button"
+                        className="chat-msg-action-btn is-todo-action"
+                        onClick={() => {
+                          setTodoDraftInput({
+                            rootSeq: msg.seq,
+                            rootAuthor: senderLabel(msg.senderId),
+                            rootCreatedAt: msg.createdAt,
+                            rootSummary: messageSnippet(msg, cardViews[msg.messageId]),
+                            conclusionAuthor: conclusionMsg
+                              ? senderLabel(conclusionMsg.senderId)
+                              : undefined,
+                            conclusionSummary: conclusionMsg
+                              ? messageSnippet(
+                                  conclusionMsg,
+                                  cardViews[conclusionMsg.messageId],
+                                )
+                              : undefined,
+                            replyCount: rootReplies.length,
+                          });
+                        }}
+                      >
+                        <ListTodo size={12} /> 整理为协作文档待办
+                      </button>
+                    )}
                 </footer>
               </article>
             );
@@ -1175,7 +1499,11 @@ export function ChatPane({
                         ? `WIP ${shortId(item.payload.content.snapshotId)}`
                         : item.payload.content.kind === "FILE_REF"
                           ? `File ${shortId(item.payload.content.targetId)}`
-                          : `Comment ${shortId(item.payload.content.commentId)}`}
+                          : item.payload.content.kind === "DOC_REF"
+                            ? `Doc ${shortId(item.payload.content.documentId)}`
+                            : item.payload.content.kind === "PDF_REF"
+                              ? `PDF p.${item.payload.content.pageNumber}`
+                              : `Comment ${shortId(item.payload.content.commentId)}`}
                   </code>
                   {item.payload.content.purpose && (
                     <p className="chat-msg-text">{item.payload.content.purpose}</p>
@@ -1468,6 +1796,20 @@ export function ChatPane({
           </form>
         )}
       </footer>
+
+      {todoDraftInput && access && (
+        <ResolvedConclusionDraftModal
+          spaceId={spaceId}
+          access={access}
+          documents={documents}
+          draftInput={todoDraftInput}
+          onClose={() => setTodoDraftInput(null)}
+          onCommitted={(documentId, title) => {
+            setTodoDraftInput(null);
+            onTodoDraftCommitted?.(documentId, title);
+          }}
+        />
+      )}
     </aside>
   );
 }

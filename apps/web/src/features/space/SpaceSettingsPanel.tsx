@@ -1,21 +1,25 @@
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  AiSourceKind,
   CreateInvite,
   Invite,
   InviteRole,
   Member,
+  SpaceAiPolicy,
   SpaceSummary,
 } from "@orbitspace/shared-types";
 import {
   AlertCircle,
   AlertTriangle,
   Check,
+  CheckCircle2,
   Copy,
   Crown,
   Link2,
   LogOut,
   Shield,
+  Sparkles,
   Trash2,
   UserMinus,
   Users,
@@ -24,11 +28,14 @@ import { queryClient, revokeSpace, spaceKey, spacesKey, type SpaceAccess } from 
 import { canManageSpace } from "../../shared/auth/session";
 import { Button, Loading } from "../../shared/ui/UiComponents";
 import {
+  AI_SOURCE_KIND_META,
+  ALL_AI_SOURCE_KINDS,
   changeSpaceMemberRole,
   copyToClipboard,
   createSpaceInvite,
   featureErrorText,
   formatDateTime,
+  getSpaceAiConfig,
   leaveSpace,
   listSpaceInvites,
   listSpaceMembers,
@@ -37,6 +44,7 @@ import {
   revokeSpaceInvite,
   SPACE_ROLE_LABELS,
   transferSpaceOwnership,
+  updateSpaceAiConfig,
   type CreateInviteResult,
 } from "./spaceApi";
 
@@ -88,7 +96,13 @@ export function SpaceSettingsPanel({
   const [pendingTransfer, setPendingTransfer] = useState<Member | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
 
+  const [aiEnabledDraft, setAiEnabledDraft] = useState(false);
+  const [aiKindsDraft, setAiKindsDraft] = useState<AiSourceKind[]>([]);
+  const [aiDraftDirty, setAiDraftDirty] = useState(false);
+  const [aiSavedBanner, setAiSavedBanner] = useState<string | null>(null);
+
   const transferIdemRef = useRef<{ userId: string; key: string } | null>(null);
+  const aiConfigIdemRef = useRef<string>(makeIdempotencyKey());
 
   const membersQueryKey = useMemo(
     () => [...spaceKey(access), "members"] as const,
@@ -96,6 +110,10 @@ export function SpaceSettingsPanel({
   );
   const invitesQueryKey = useMemo(
     () => [...spaceKey(access), "invites"] as const,
+    [access],
+  );
+  const aiConfigQueryKey = useMemo(
+    () => [...spaceKey(access), "ai-config"] as const,
     [access],
   );
 
@@ -109,6 +127,58 @@ export function SpaceSettingsPanel({
     enabled: isAdminOrOwner,
     queryFn: ({ signal }) => listSpaceInvites(space.spaceId, access, signal),
   });
+
+  const aiConfigQuery = useQuery({
+    queryKey: aiConfigQueryKey,
+    queryFn: ({ signal }) => getSpaceAiConfig(space.spaceId, access, signal),
+  });
+
+  useEffect(() => {
+    if (!aiConfigQuery.data || aiDraftDirty) return;
+    setAiEnabledDraft(aiConfigQuery.data.enabled);
+    setAiKindsDraft(aiConfigQuery.data.allowedKinds);
+  }, [aiConfigQuery.data, aiDraftDirty]);
+
+  const saveAiConfigMutation = useMutation({
+    mutationFn: ({ payload, key }: { payload: SpaceAiPolicy; key: string }) =>
+      updateSpaceAiConfig(space.spaceId, payload, access, key),
+    onSuccess: (updated) => {
+      aiConfigIdemRef.current = makeIdempotencyKey();
+      setAiEnabledDraft(updated.enabled);
+      setAiKindsDraft(updated.allowedKinds);
+      setAiDraftDirty(false);
+      setAiSavedBanner(
+        updated.enabled
+          ? `已保存：AI 辅助摘要已启用（已允许 ${updated.allowedKinds.length} 类数据源）。`
+          : "已保存：空间 AI 辅助摘要已关闭。",
+      );
+      queryClient.setQueryData<SpaceAiPolicy>(aiConfigQueryKey, updated);
+      void queryClient.invalidateQueries({ queryKey: aiConfigQueryKey });
+      onSpaceUpdated();
+    },
+  });
+
+  const toggleAiKind = (kind: AiSourceKind) => {
+    setAiSavedBanner(null);
+    setAiDraftDirty(true);
+    aiConfigIdemRef.current = makeIdempotencyKey();
+    setAiKindsDraft((prev) =>
+      prev.includes(kind) ? prev.filter((item) => item !== kind) : [...prev, kind],
+    );
+  };
+
+  const handleSaveAiConfig = (event: FormEvent) => {
+    event.preventDefault();
+    if (!isAdminOrOwner || saveAiConfigMutation.isPending) return;
+    setAiSavedBanner(null);
+    saveAiConfigMutation.mutate({
+      payload: {
+        enabled: aiEnabledDraft,
+        allowedKinds: aiKindsDraft,
+      },
+      key: aiConfigIdemRef.current,
+    });
+  };
 
   const refreshMembershipData = () => {
     void queryClient.invalidateQueries({ queryKey: membersQueryKey });
@@ -227,6 +297,145 @@ export function SpaceSettingsPanel({
           </p>
         </div>
       </div>
+
+      <section className="settings-section" aria-label="AI 辅助摘要策略">
+        <div className="section-head">
+          <h3>
+            <Sparkles size={16} /> AI 辅助摘要策略
+          </h3>
+          {aiConfigQuery.data && (
+            <span
+              className={`settings-status-pill tone-${aiConfigQuery.data.enabled ? "ok" : "muted"}`}
+            >
+              {aiConfigQuery.data.enabled ? "已启用" : "默认关闭"}
+            </span>
+          )}
+        </div>
+
+        <p className="muted">
+          AI 摘要默认关闭。每次调用仅读取发起人当前有权访问的不可变版本，输出附带引用来源，并在写入协作文档前由用户预览确认。
+        </p>
+
+        {aiConfigQuery.isPending && <Loading label="正在读取空间 AI 策略…" />}
+        {aiConfigQuery.isError && (
+          <div className="alert" role="alert">
+            <AlertCircle size={16} />
+            <span>{featureErrorText(aiConfigQuery.error)}</span>
+          </div>
+        )}
+
+        {aiConfigQuery.isSuccess && isAdminOrOwner && (
+          <form className="ai-policy-form" onSubmit={handleSaveAiConfig}>
+            <label className="ai-policy-switch">
+              <input
+                type="checkbox"
+                checked={aiEnabledDraft}
+                disabled={saveAiConfigMutation.isPending}
+                onChange={(e) => {
+                  setAiEnabledDraft(e.target.checked);
+                  setAiDraftDirty(true);
+                  setAiSavedBanner(null);
+                  aiConfigIdemRef.current = makeIdempotencyKey();
+                }}
+              />
+              <div>
+                <strong>启用本空间 AI 辅助摘要</strong>
+                <p className="muted">
+                  仅 OWNER / ADMIN 可调整此开关及允许发送给 AI 的资源类型范围。
+                </p>
+              </div>
+            </label>
+
+            <fieldset
+              className="ai-policy-kinds"
+              disabled={saveAiConfigMutation.isPending}
+            >
+              <legend>允许发送给 AI 的数据范围（按类型控制）</legend>
+              <div className="ai-policy-kinds-grid">
+                {ALL_AI_SOURCE_KINDS.map((kind) => {
+                  const checked = aiKindsDraft.includes(kind);
+                  const meta = AI_SOURCE_KIND_META[kind];
+                  return (
+                    <label
+                      key={kind}
+                      className={`ai-kind-option ${checked ? "is-checked" : ""}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleAiKind(kind)}
+                      />
+                      <div>
+                        <strong>{meta.label}</strong>
+                        <p className="muted">{meta.description}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            {aiEnabledDraft && aiKindsDraft.length === 0 && (
+              <div className="drawer-callout drawer-callout-warn" role="status">
+                <AlertTriangle size={15} />
+                <span>当前未勾选任何允许发送的数据类型，成员将无法选择资料发起 AI 摘要。</span>
+              </div>
+            )}
+
+            {saveAiConfigMutation.isError && (
+              <div className="alert" role="alert">
+                <AlertCircle size={16} />
+                <span>{featureErrorText(saveAiConfigMutation.error)}</span>
+              </div>
+            )}
+
+            {aiSavedBanner && (
+              <div className="ai-policy-saved" role="status">
+                <CheckCircle2 size={15} />
+                <span>{aiSavedBanner}</span>
+              </div>
+            )}
+
+            <div className="actions">
+              <Button
+                type="submit"
+                className="primary workbench-btn-xs"
+                disabled={saveAiConfigMutation.isPending || !aiDraftDirty}
+              >
+                {saveAiConfigMutation.isPending ? "保存中…" : "保存 AI 策略配置"}
+              </Button>
+              {aiDraftDirty && (
+                <Button
+                  className="secondary workbench-btn-xs"
+                  disabled={saveAiConfigMutation.isPending}
+                  onClick={() => {
+                    setAiEnabledDraft(aiConfigQuery.data.enabled);
+                    setAiKindsDraft(aiConfigQuery.data.allowedKinds);
+                    setAiDraftDirty(false);
+                    setAiSavedBanner(null);
+                  }}
+                >
+                  还原更改
+                </Button>
+              )}
+            </div>
+          </form>
+        )}
+
+        {aiConfigQuery.isSuccess && !isAdminOrOwner && (
+          <div className="ai-policy-readonly">
+            <p className="muted">
+              当前状态：{aiConfigQuery.data.enabled ? "已启用" : "未启用"} · 允许范围：
+              {aiConfigQuery.data.allowedKinds.length > 0
+                ? aiConfigQuery.data.allowedKinds
+                    .map((k) => AI_SOURCE_KIND_META[k].label)
+                    .join("、")
+                : "无（管理员未开放任何数据类型）"}
+            </p>
+            <p className="muted">仅空间 OWNER 或 ADMIN 可修改 AI 辅助策略。</p>
+          </div>
+        )}
+      </section>
 
       {isAdminOrOwner && (
         <section className="settings-section" aria-label="邀请管理">

@@ -30,6 +30,11 @@ export function errorText(error: unknown) {
     case "DOWNLOAD_LIMIT_EXCEEDED": return "已达到该空投为你设置的下载次数上限。";
     case "NOT_FRIENDS_FOR_AIRDROP": return "只能向当前有效好友发起独立文件空投，请先确认好友关系。";
     case "DIFF_DATA_INSUFFICIENT": return "两端点共享内容或基础对象不足以计算完整差异，请按提示补传内容。";
+    case "REMOTE_URL_FORBIDDEN": return "受控策略拒绝该远端地址：仅允许受信任托管平台的 HTTPS（443 端口）地址，禁止用户信息、查询参数或非法协议。";
+    case "SSRF_TARGET_BLOCKED": return "受控出口代理已拦截目标地址（内网/保留网段或受限重定向）。";
+    case "AI_DISABLED_IN_SPACE": return "当前空间尚未启用 AI 辅助摘要，请联系空间管理员配置开启。";
+    case "DOC_ANCHOR_UNPERSISTED": return "所选文档内容尚未持久化保存或版本边界已变化，请等待保存完成后重试。";
+    case "COLLAB_REVOKED": return "文档协同访问授权已撤销，请重新核对空间权限。";
     default: return "服务暂时无法完成请求，请稍后重试。";
   }
 }
