@@ -18,7 +18,11 @@ class DocumentTransformService {
     private final DocumentStore store;
     private final byte[] secret;
     private final URI endpoint;
-    private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
+    private final HttpClient client =
+            HttpClient.newBuilder()
+                    .version(HttpClient.Version.HTTP_1_1)
+                    .connectTimeout(Duration.ofSeconds(3))
+                    .build();
     DocumentTransformService(DocumentStore store,
             @Value("${ORBIT_INTERNAL_HMAC_SECRET:local-only-internal-hmac-secret}") String secret,
             @Value("${orbit.document.transform-url:http://collab-hocuspocus:1234/internal/v1/"

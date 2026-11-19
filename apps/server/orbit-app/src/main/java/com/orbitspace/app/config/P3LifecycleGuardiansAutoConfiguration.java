@@ -167,7 +167,10 @@ public class P3LifecycleGuardiansAutoConfiguration {
                     requirePositiveDuration(
                             docAutoVersionRetention, "Document AUTO version retention");
             this.httpClient =
-                    HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
+                    HttpClient.newBuilder()
+                            .version(HttpClient.Version.HTTP_1_1)
+                            .connectTimeout(Duration.ofSeconds(3))
+                            .build();
         }
 
         /**

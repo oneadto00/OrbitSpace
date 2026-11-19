@@ -92,6 +92,23 @@ public class IntegrationJobResultService {
     public InternalClaimedJobResponse claimJob(String rawJobId, InternalClaimJobRequest req) {
         String jobId = normalizeId(rawJobId);
         JobRow row = loadJob(jobId);
+        boolean handledInProcess =
+                processors.orderedStream().anyMatch(p -> row.job().type().equals(p.jobType()));
+        if (handledInProcess) {
+            AsyncJobPort.Job job = row.job();
+            return new InternalClaimedJobResponse(
+                    false,
+                    job.jobId(),
+                    job.type(),
+                    job.spaceId(),
+                    job.resourceId(),
+                    job.actorId(),
+                    job.inputObjectKey(),
+                    job.inputVersion(),
+                    job.resourceLifecycleVersion(),
+                    null,
+                    null);
+        }
         Optional<AsyncJobPort.Attempt> attemptOpt =
                 asyncJobs.claim(jobId, Duration.ofSeconds(req.leaseSeconds()));
         if (attemptOpt.isEmpty()) {
