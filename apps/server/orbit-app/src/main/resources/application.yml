@@ -23,6 +23,15 @@ logging:
   pattern:
     level: "%5p [requestId=%X{requestId:-}]"
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: never
+
 orbit:
   public-origin: ${ORBIT_PUBLIC_ORIGIN:https://localhost:8443}
   s3:
@@ -30,3 +39,11 @@ orbit:
     bucket: ${ORBIT_S3_BUCKET:orbitspace-private}
     access-key: ${ORBIT_S3_ACCESS_KEY:${MINIO_ROOT_USER:orbit-local}}
     secret-key: ${ORBIT_S3_SECRET_KEY:${MINIO_ROOT_PASSWORD:local-only-minio-password}}
+  guardians:
+    doc-snapshot-interval: ${ORBIT_DOC_SNAPSHOT_INTERVAL:PT5M}
+    doc-retention-interval: ${ORBIT_DOC_RETENTION_INTERVAL:PT15M}
+    doc-batch-retention: ${ORBIT_DOC_BATCH_RETENTION:7d}
+    doc-auto-version-retention: ${ORBIT_DOC_AUTO_VERSION_RETENTION:30d}
+  observability:
+    poll-interval: ${ORBIT_OBSERVABILITY_POLL_INTERVAL:PT15S}
+    log-interval: ${ORBIT_OBSERVABILITY_LOG_INTERVAL:PT5M}

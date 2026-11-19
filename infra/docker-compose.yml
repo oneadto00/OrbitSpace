@@ -28,7 +28,7 @@ services:
     image: redis:7.4
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:${ORBIT_REDIS_HOST_PORT:-6379}:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -100,6 +100,9 @@ services:
         condition: service_started
     environment:
       ORBIT_GIT_TRUSTED_HOSTS: &git-hosts ${ORBIT_GIT_TRUSTED_HOSTS:-github.com,gitlab.com,bitbucket.org}
+      ORBIT_GIT_KEY_VERSION: ${ORBIT_GIT_KEY_VERSION:-1}
+      ORBIT_GIT_KEY_V1: ${ORBIT_GIT_KEY_V1:-bG9jYWwtb25seS1kZXYtZ2l0LWtlay12MS0wMTIzNDU=}
+      ORBIT_AUTH_JWT_KEY: ${ORBIT_AUTH_JWT_KEY:-bG9jYWwtb25seS1kZXYtand0LWtleS12MS0wMTIzNDU=}
       SERVER_PORT: 8080
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/orbitspace
       SPRING_DATASOURCE_USERNAME: orbitspace
@@ -136,6 +139,7 @@ services:
     environment:
       HTTPS_PROXY: http://egress-proxy:3128
       NO_PROXY: server,redis,minio
+      ORBIT_GIT_TRUSTED_HOSTS: *git-hosts
       GIT_CONFIG_COUNT: "2"
       GIT_CONFIG_KEY_0: http.sslVerify
       GIT_CONFIG_VALUE_0: "true"

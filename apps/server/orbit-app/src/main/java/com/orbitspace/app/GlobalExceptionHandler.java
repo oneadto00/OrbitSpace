@@ -8,11 +8,14 @@ import com.orbitspace.kernel.ApiErrorResponse;
 import com.orbitspace.kernel.DomainException;
 import com.orbitspace.kernel.ErrorCode;
 import com.orbitspace.kernel.KernelErrorCode;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -33,15 +36,32 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler
         implements AuthenticationEntryPoint, AccessDeniedHandler {
     private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     private final ObjectMapper mapper;
+    private final ObjectProvider<MeterRegistry> meterRegistryProvider;
 
-    public GlobalExceptionHandler(ObjectMapper mapper) {
+    public GlobalExceptionHandler(
+            ObjectMapper mapper, ObjectProvider<MeterRegistry> meterRegistryProvider) {
         this.mapper = mapper;
+        this.meterRegistryProvider = meterRegistryProvider;
     }
 
     @ExceptionHandler(DomainException.class)
     ResponseEntity<ApiErrorResponse> domain(DomainException ex, HttpServletRequest request) {
         var code = ex.errorCode();
+        recordDomainErrorMetric(code);
         return ResponseEntity.status(code.httpStatus()).body(error(request, code, ex.details(), ex));
+    }
+
+    private void recordDomainErrorMetric(ErrorCode code) {
+        MeterRegistry registry = meterRegistryProvider.getIfAvailable();
+        if (registry == null || code == null) {
+            return;
+        }
+        if (code == KernelErrorCode.QUOTA_EXCEEDED) {
+            Counter.builder("orbit.quota.rejections").register(registry).increment();
+        } else if (code == KernelErrorCode.SSRF_TARGET_BLOCKED
+                || code == KernelErrorCode.REMOTE_URL_FORBIDDEN) {
+            Counter.builder("orbit.egress.blocked").register(registry).increment();
+        }
     }
 
     @ExceptionHandler({AuthenticationException.class, AccessDeniedException.class, ConstraintViolationException.class})

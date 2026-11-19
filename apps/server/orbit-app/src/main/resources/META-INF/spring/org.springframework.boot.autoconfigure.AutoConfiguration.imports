@@ -1,3 +1,5 @@
 com.orbitspace.app.config.FoundationSecurityAutoConfiguration
 com.orbitspace.app.config.P1LifecycleGuardiansAutoConfiguration
 com.orbitspace.app.config.P2LifecycleGuardiansAutoConfiguration
+com.orbitspace.app.config.P3LifecycleGuardiansAutoConfiguration
+com.orbitspace.app.config.OrbitObservabilityAutoConfiguration
