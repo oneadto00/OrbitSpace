@@ -28,12 +28,16 @@ import com.orbitspace.modules.chat.ChatDtos.CodeCommentRefContent;
 import com.orbitspace.modules.chat.ChatDtos.CommitRefContent;
 import com.orbitspace.modules.chat.ChatDtos.Discussion;
 import com.orbitspace.modules.chat.ChatDtos.DiscussionStatusChangedPayload;
+import com.orbitspace.modules.chat.ChatDtos.DocRefContent;
 import com.orbitspace.modules.chat.ChatDtos.EventPage;
 import com.orbitspace.modules.chat.ChatDtos.FileRefContent;
+import com.orbitspace.modules.chat.ChatDtos.ForwardCommentRequest;
 import com.orbitspace.modules.chat.ChatDtos.HistoryPage;
 import com.orbitspace.modules.chat.ChatDtos.MessageAck;
 import com.orbitspace.modules.chat.ChatDtos.MessageContent;
 import com.orbitspace.modules.chat.ChatDtos.MessageCreatedPayload;
+import com.orbitspace.modules.chat.ChatDtos.PdfRefContent;
+import com.orbitspace.modules.chat.ChatDtos.PdfSelectionRect;
 import com.orbitspace.modules.chat.ChatDtos.ReadCursorResponse;
 import com.orbitspace.modules.chat.ChatDtos.ResolveCardsRequest;
 import com.orbitspace.modules.chat.ChatDtos.ResourceCardResult;
@@ -62,6 +66,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -96,6 +101,33 @@ public class ChatService
 
     private record CanonicalChangeDiscussion(
             String messageId, DiscussionStatus status, String conclusionMsgId) {}
+
+    private record CanonicalForwardComment(
+            MessageKind kind,
+            String resourceId,
+            String versionId,
+            String commentId,
+            String clientMsgId,
+            String purpose) {}
+
+    private record DocumentCommentAnchorRow(
+            String commentId,
+            MessageKind kind,
+            String documentId,
+            String persistedVersionId,
+            String relativeStart,
+            String relativeEnd,
+            String fileId,
+            String fileVersionId,
+            Integer pageNumber,
+            List<PdfSelectionRect> rectangles,
+            String rectanglesJson,
+            String quotedText,
+            String contextBefore,
+            String contextAfter,
+            String discussionThreadId) {}
+
+    private record CardReferenceRow(Reference reference, String cardLifecycleState) {}
 
     private record LockedRootMessage(String senderId, String replyToMsgId) {}
 
@@ -570,6 +602,69 @@ public class ChatService
                                 payloadJson,
                                 payloadNode,
                                 envelopeJsons);
+                    } else if (ref.kind() == MessageKind.DOC_REF
+                            || ref.kind() == MessageKind.PDF_REF) {
+                        RoomRow room = lockRoomBySpaceId(change.spaceId());
+                        if (room == null) {
+                            return;
+                        }
+                        if (change.state() != ResourceLifecycleState.ACTIVE) {
+                            String persistedState =
+                                    change.state() == ResourceLifecycleState.FORCE_PURGED
+                                            ? "FORCE_PURGED"
+                                            : "EXPIRED_OR_DELETED";
+                            Timestamp invalidatedAt = Timestamp.from(now);
+                            db.update(
+                                    """
+                                    UPDATE chat_doc_pdf_cards
+                                    SET quoted_text = NULL,
+                                        context_before = NULL,
+                                        context_after = NULL,
+                                        relative_start = CASE WHEN ? = 'FORCE_PURGED' THEN NULL ELSE relative_start END,
+                                        relative_end = CASE WHEN ? = 'FORCE_PURGED' THEN NULL ELSE relative_end END,
+                                        rectangles_json = CASE WHEN ? = 'FORCE_PURGED' THEN NULL ELSE rectangles_json END,
+                                        lifecycle_state = CASE
+                                            WHEN lifecycle_state = 'FORCE_PURGED' THEN 'FORCE_PURGED'
+                                            ELSE ?
+                                        END,
+                                        lifecycle_version = GREATEST(lifecycle_version, ?),
+                                        invalidated_at = COALESCE(invalidated_at, ?)
+                                    WHERE room_id = ?
+                                      AND kind = ?
+                                      AND comment_id = ?
+                                    """,
+                                    persistedState,
+                                    persistedState,
+                                    persistedState,
+                                    persistedState,
+                                    Math.max(1L, change.lifecycleVersion()),
+                                    invalidatedAt,
+                                    room.roomId(),
+                                    ref.kind().name(),
+                                    ref.targetId());
+                        }
+                        List<String> messageIds =
+                                db.queryForList(
+                                        """
+                                        SELECT id
+                                        FROM chat_messages
+                                        WHERE room_id = ?
+                                          AND kind = ?
+                                          AND ref_target_id = ?
+                                        ORDER BY seq ASC
+                                        """,
+                                        String.class,
+                                        room.roomId(),
+                                        ref.kind().name(),
+                                        ref.targetId());
+                        emitCardStateChangedEvents(
+                                room,
+                                messageIds,
+                                change.lifecycleVersion(),
+                                now,
+                                payloadJson,
+                                payloadNode,
+                                envelopeJsons);
                     } else {
                         RoomRow room = lockRoomBySpaceId(change.spaceId());
                         if (room == null) {
@@ -696,13 +791,316 @@ public class ChatService
                 });
     }
 
+    public MessageAck forwardDocumentComment(
+            String spaceId,
+            String documentId,
+            String commentId,
+            String userId,
+            long membershipEpoch,
+            String idempotencyKey,
+            ForwardCommentRequest request) {
+        authorization.requireMembership(spaceId, userId, membershipEpoch, SpaceRole.MEMBER);
+        validateId(spaceId, 64);
+        validateId(documentId, 64);
+        validateId(commentId, 64);
+        ChatIdempotencyStore.validateKey(idempotencyKey);
+        if (request == null) {
+            throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+        }
+        String storedClientMsgId = normalizeStrictClientMsgId(request.clientMsgId());
+        validatePurpose(request.purpose());
+
+        DocumentCommentAnchorRow anchor =
+                loadDocumentCommentAnchor(spaceId, documentId, commentId);
+        requireResourceActive(
+                userId,
+                spaceId,
+                membershipEpoch,
+                new Reference(MessageKind.DOC_REF, null, anchor.commentId()));
+
+        DocRefContent content =
+                new DocRefContent(
+                        anchor.documentId(),
+                        anchor.commentId(),
+                        anchor.persistedVersionId(),
+                        anchor.relativeStart(),
+                        anchor.relativeEnd(),
+                        request.purpose());
+        CanonicalForwardComment canonicalInput =
+                new CanonicalForwardComment(
+                        MessageKind.DOC_REF,
+                        documentId,
+                        anchor.persistedVersionId(),
+                        commentId,
+                        storedClientMsgId,
+                        request.purpose());
+
+        return forwardDocOrPdfCommentInternal(
+                "FORWARD_DOC_COMMENT",
+                spaceId,
+                userId,
+                idempotencyKey,
+                storedClientMsgId,
+                canonicalInput,
+                anchor,
+                content);
+    }
+
+    public MessageAck forwardPdfComment(
+            String spaceId,
+            String fileId,
+            String fileVersionId,
+            String commentId,
+            String userId,
+            long membershipEpoch,
+            String idempotencyKey,
+            ForwardCommentRequest request) {
+        authorization.requireMembership(spaceId, userId, membershipEpoch, SpaceRole.MEMBER);
+        validateId(spaceId, 64);
+        validateId(fileId, 64);
+        validateId(fileVersionId, 64);
+        validateId(commentId, 64);
+        ChatIdempotencyStore.validateKey(idempotencyKey);
+        if (request == null) {
+            throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+        }
+        String storedClientMsgId = normalizeStrictClientMsgId(request.clientMsgId());
+        validatePurpose(request.purpose());
+
+        DocumentCommentAnchorRow anchor =
+                loadPdfCommentAnchor(spaceId, fileId, fileVersionId, commentId);
+        requireResourceActive(
+                userId,
+                spaceId,
+                membershipEpoch,
+                new Reference(MessageKind.PDF_REF, null, anchor.commentId()));
+
+        PdfRefContent content =
+                new PdfRefContent(
+                        anchor.fileId(),
+                        anchor.fileVersionId(),
+                        anchor.commentId(),
+                        anchor.pageNumber(),
+                        anchor.rectangles(),
+                        request.purpose());
+        CanonicalForwardComment canonicalInput =
+                new CanonicalForwardComment(
+                        MessageKind.PDF_REF,
+                        fileId,
+                        fileVersionId,
+                        commentId,
+                        storedClientMsgId,
+                        request.purpose());
+
+        return forwardDocOrPdfCommentInternal(
+                "FORWARD_PDF_COMMENT",
+                spaceId,
+                userId,
+                idempotencyKey,
+                storedClientMsgId,
+                canonicalInput,
+                anchor,
+                content);
+    }
+
+    private MessageAck forwardDocOrPdfCommentInternal(
+            String operation,
+            String spaceId,
+            String userId,
+            String idempotencyKey,
+            String storedClientMsgId,
+            CanonicalForwardComment canonicalInput,
+            DocumentCommentAnchorRow anchor,
+            ClientContent content) {
+        return tx.execute(
+                status -> {
+                    RoomRow room = ensureAndLockRoom(spaceId);
+                    return idempotency.execute(
+                            operation,
+                            room.roomId(),
+                            userId,
+                            idempotencyKey,
+                            canonicalInput,
+                            MessageAck.class,
+                            () -> {
+                                requireSourceStillActiveInTx(spaceId, anchor);
+                                ThreadSummary sharedThread =
+                                        findThread(spaceId, anchor.discussionThreadId())
+                                                .filter(t -> room.roomId().equals(t.roomId()))
+                                                .orElseThrow(
+                                                        () ->
+                                                                new DomainException(
+                                                                        KernelErrorCode
+                                                                                .RESOURCE_NOT_FOUND));
+                                String threadRootMsgId = sharedThread.rootMessageId();
+                                String payloadDigest =
+                                        ChatSecrets.digestJson(
+                                                mapper,
+                                                new CanonicalSendPayload(
+                                                        threadRootMsgId, content));
+                                MessageAck existingByClientId =
+                                        findExistingMessageAck(
+                                                room.roomId(),
+                                                userId,
+                                                storedClientMsgId,
+                                                payloadDigest);
+                                if (existingByClientId != null) {
+                                    return existingByClientId;
+                                }
+
+                                long nextSeq = room.maxSeq() + 1;
+                                long nextEventSeq = room.maxEventSeq() + 1;
+                                db.update(
+                                        "UPDATE chat_rooms SET max_msg_seq = ?, max_event_seq = ? WHERE id = ?",
+                                        nextSeq,
+                                        nextEventSeq,
+                                        room.roomId());
+
+                                String messageId = ChatSecrets.id();
+                                Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+                                Timestamp createdAt = Timestamp.from(now);
+                                String refPurpose =
+                                        content instanceof DocRefContent doc
+                                                ? doc.purpose()
+                                                : ((PdfRefContent) content).purpose();
+
+                                db.update(
+                                        """
+                                        INSERT INTO chat_messages(
+                                            id, room_id, seq, sender_id, client_msg_id, kind,
+                                            body_text, ref_project_id, ref_target_id, ref_grant_type, ref_purpose,
+                                            reply_to_msg_id, payload_digest, discussion_version, created_at
+                                        )
+                                        VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, ?, ?, ?, NULL, ?)
+                                        """,
+                                        messageId,
+                                        room.roomId(),
+                                        nextSeq,
+                                        userId,
+                                        storedClientMsgId,
+                                        content.messageKind().name(),
+                                        anchor.commentId(),
+                                        refPurpose,
+                                        threadRootMsgId,
+                                        payloadDigest,
+                                        createdAt);
+
+                                bindDiscussionThreadAnchor(
+                                        room.roomId(),
+                                        threadRootMsgId,
+                                        anchor.kind(),
+                                        anchor.commentId());
+                                insertDocPdfCardMetadata(
+                                        messageId, room.roomId(), threadRootMsgId, anchor, createdAt);
+
+                                ChatMessage chatMessage =
+                                        new ChatMessage(
+                                                room.roomId(),
+                                                messageId,
+                                                nextSeq,
+                                                userId,
+                                                storedClientMsgId,
+                                                now,
+                                                threadRootMsgId,
+                                                null,
+                                                content);
+                                String payloadJson =
+                                        ChatSecrets.toJson(
+                                                mapper, new MessageCreatedPayload(chatMessage));
+                                String eventId = ChatSecrets.id();
+
+                                db.update(
+                                        """
+                                        INSERT INTO chat_events(
+                                            id, room_id, event_seq, event_type, target_id, target_version, payload_json, created_at
+                                        )
+                                        VALUES (?, ?, ?, 'MESSAGE_CREATED', ?, 1, CAST(? AS JSON), ?)
+                                        """,
+                                        eventId,
+                                        room.roomId(),
+                                        nextEventSeq,
+                                        messageId,
+                                        payloadJson,
+                                        createdAt);
+
+                                RoomEvent roomEvent =
+                                        new RoomEvent(
+                                                RoomEventType.MESSAGE_CREATED,
+                                                room.roomId(),
+                                                nextEventSeq,
+                                                messageId,
+                                                1L,
+                                                readTree(payloadJson));
+                                outbox.publish(
+                                        new OutboxPublisherPort.Event(
+                                                eventId,
+                                                "CHAT_MESSAGE_CREATED",
+                                                "CHAT_ROOM",
+                                                room.roomId(),
+                                                ChatSecrets.toJson(mapper, roomEvent),
+                                                now));
+
+                                String wsEnvelopeJson =
+                                        ChatSecrets.toJson(
+                                                mapper, new WsEnvelope("ROOM_EVENT", roomEvent));
+                                afterCommit(() -> broadcastRoomEventSafely(wsEnvelopeJson));
+
+                                return new MessageAck(
+                                        room.roomId(),
+                                        storedClientMsgId,
+                                        messageId,
+                                        nextSeq,
+                                        nextEventSeq);
+                            });
+                });
+    }
+
     public MessageAck sendMessage(
             String userId, String spaceId, long membershipEpoch, SendMessageRequest request) {
         authorization.requireMembership(spaceId, userId, membershipEpoch, SpaceRole.MEMBER);
         validateSendMessage(request);
 
+        DocumentCommentAnchorRow docPdfAnchor = null;
+        ClientContent effectiveContent = request.content();
+        if (request.content() instanceof DocRefContent docRef) {
+            docPdfAnchor =
+                    loadDocumentCommentAnchor(spaceId, docRef.documentId(), docRef.commentId());
+            verifySubmittedDocAnchor(docRef, docPdfAnchor);
+            effectiveContent =
+                    new DocRefContent(
+                            docPdfAnchor.documentId(),
+                            docPdfAnchor.commentId(),
+                            docPdfAnchor.persistedVersionId(),
+                            docPdfAnchor.relativeStart(),
+                            docPdfAnchor.relativeEnd(),
+                            docRef.purpose());
+        } else if (request.content() instanceof PdfRefContent pdfRef) {
+            docPdfAnchor =
+                    loadPdfCommentAnchor(
+                            spaceId,
+                            pdfRef.fileId(),
+                            pdfRef.fileVersionId(),
+                            pdfRef.commentId());
+            verifySubmittedPdfAnchor(pdfRef, docPdfAnchor);
+            effectiveContent =
+                    new PdfRefContent(
+                            docPdfAnchor.fileId(),
+                            docPdfAnchor.fileVersionId(),
+                            docPdfAnchor.commentId(),
+                            docPdfAnchor.pageNumber(),
+                            docPdfAnchor.rectangles(),
+                            pdfRef.purpose());
+        }
+
+        final DocumentCommentAnchorRow resolvedAnchor = docPdfAnchor;
+        final ClientContent canonicalContent = effectiveContent;
+
         String payloadDigest = ChatSecrets.digestJson(
-                mapper, new CanonicalSendPayload(request.replyToMsgId(), request.content()));
+                mapper, new CanonicalSendPayload(request.replyToMsgId(), canonicalContent));
+
+        if (resolvedAnchor != null) {
+            requireResourceActive(userId, spaceId, membershipEpoch, canonicalContent);
+        }
 
         RoomRow preflightRoom = findRoomBySpaceId(spaceId);
         if (preflightRoom != null) {
@@ -713,8 +1111,8 @@ public class ChatService
             }
         }
 
-        if (!(request.content() instanceof TextContent)) {
-            requireResourceActive(userId, spaceId, membershipEpoch, request.content());
+        if (resolvedAnchor == null && !(canonicalContent instanceof TextContent)) {
+            requireResourceActive(userId, spaceId, membershipEpoch, canonicalContent);
         }
 
         // Execute in TransactionTemplate so DB commit completes before returning MessageAck.
@@ -727,14 +1125,27 @@ public class ChatService
                         return existing;
                     }
 
-                    if (request.replyToMsgId() != null) {
+                    if (resolvedAnchor != null) {
+                        requireSourceStillActiveInTx(spaceId, resolvedAnchor);
+                    }
+
+                    String effectiveReplyToMsgId = request.replyToMsgId();
+                    if (effectiveReplyToMsgId != null) {
                         boolean parentExists = Boolean.TRUE.equals(db.queryForObject(
                                 "SELECT EXISTS(SELECT 1 FROM chat_messages WHERE id = ? AND room_id = ?)",
                                 Boolean.class,
-                                request.replyToMsgId(),
+                                effectiveReplyToMsgId,
                                 room.roomId()));
                         if (!parentExists) {
                             throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+                        }
+                    } else if (resolvedAnchor != null
+                            && resolvedAnchor.discussionThreadId() != null) {
+                        ThreadSummary existingThread =
+                                findThreadByRootMsgId(
+                                        room.roomId(), resolvedAnchor.discussionThreadId());
+                        if (existingThread != null) {
+                            effectiveReplyToMsgId = existingThread.rootMessageId();
                         }
                     }
 
@@ -749,7 +1160,7 @@ public class ChatService
                     String messageId = ChatSecrets.id();
                     Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
                     Timestamp createdAt = Timestamp.from(now);
-                    boolean isRoot = request.replyToMsgId() == null;
+                    boolean isRoot = effectiveReplyToMsgId == null;
                     Long discussionVersion = isRoot ? 1L : null;
 
                     String bodyText = null;
@@ -757,7 +1168,7 @@ public class ChatService
                     String refTargetId = null;
                     String refGrantType = null;
                     String refPurpose = null;
-                    switch (request.content()) {
+                    switch (canonicalContent) {
                         case TextContent text -> bodyText = text.text();
                         case CommitRefContent commit -> {
                             refProjectId = commit.projectId();
@@ -779,6 +1190,14 @@ public class ChatService
                             refTargetId = comment.commentId();
                             refPurpose = comment.purpose();
                         }
+                        case DocRefContent doc -> {
+                            refTargetId = doc.commentId();
+                            refPurpose = doc.purpose();
+                        }
+                        case PdfRefContent pdf -> {
+                            refTargetId = pdf.commentId();
+                            refPurpose = pdf.purpose();
+                        }
                     }
 
                     db.update(
@@ -795,13 +1214,13 @@ public class ChatService
                             nextSeq,
                             userId,
                             request.clientMsgId(),
-                            request.content().messageKind().name(),
+                            canonicalContent.messageKind().name(),
                             bodyText,
                             refProjectId,
                             refTargetId,
                             refGrantType,
                             refPurpose,
-                            request.replyToMsgId(),
+                            effectiveReplyToMsgId,
                             payloadDigest,
                             discussionVersion,
                             createdAt);
@@ -822,6 +1241,28 @@ public class ChatService
                         discussion = new Discussion(DiscussionStatus.OPEN, null, 1L);
                     }
 
+                    if (resolvedAnchor != null) {
+                        ThreadSummary sharedThread =
+                                findThreadByRootMsgId(
+                                        room.roomId(), resolvedAnchor.discussionThreadId());
+                        String cardThreadId =
+                                sharedThread != null
+                                        ? sharedThread.rootMessageId()
+                                        : (isRoot
+                                                ? messageId
+                                                : null);
+                        if (cardThreadId == null) {
+                            throw new DomainException(KernelErrorCode.RESOURCE_NOT_FOUND);
+                        }
+                        bindDiscussionThreadAnchor(
+                                room.roomId(),
+                                cardThreadId,
+                                resolvedAnchor.kind(),
+                                resolvedAnchor.commentId());
+                        insertDocPdfCardMetadata(
+                                messageId, room.roomId(), cardThreadId, resolvedAnchor, createdAt);
+                    }
+
                     ChatMessage chatMessage = new ChatMessage(
                             room.roomId(),
                             messageId,
@@ -829,9 +1270,9 @@ public class ChatService
                             userId,
                             request.clientMsgId(),
                             now,
-                            request.replyToMsgId(),
+                            effectiveReplyToMsgId,
                             discussion,
-                            request.content());
+                            canonicalContent);
                     String payloadJson = ChatSecrets.toJson(
                             mapper, new MessageCreatedPayload(chatMessage));
                     String eventId = ChatSecrets.id();
@@ -917,9 +1358,12 @@ public class ChatService
                             SELECT m.id, m.room_id, m.seq, m.sender_id, m.client_msg_id, m.kind,
                                    m.body_text, m.ref_project_id, m.ref_target_id, m.ref_grant_type, m.ref_purpose,
                                    m.reply_to_msg_id, m.created_at,
-                                   dt.root_msg_id, dt.status, dt.conclusion_msg_id, dt.version
+                                   dt.root_msg_id, dt.status, dt.conclusion_msg_id, dt.version,
+                                   c.document_id, c.persisted_version_id, c.relative_start, c.relative_end,
+                                   c.file_id, c.file_version_id, c.page_number, c.rectangles_json, c.lifecycle_state
                             FROM chat_messages m
                             LEFT JOIN discussion_threads dt ON dt.root_msg_id = m.id
+                            LEFT JOIN chat_doc_pdf_cards c ON c.message_id = m.id
                             WHERE m.room_id = ? AND m.seq <= ?
                             ORDER BY m.seq DESC
                             LIMIT ?
@@ -1239,11 +1683,11 @@ public class ChatService
             }
         }
 
-        Map<String, Reference> refsByMsgId = readOnlyTx.execute(
+        Map<String, CardReferenceRow> refsByMsgId = readOnlyTx.execute(
                 status -> {
                     RoomRow room = findRoomBySpaceId(spaceId);
                     if (room == null) {
-                        return Map.<String, Reference>of();
+                        return Map.<String, CardReferenceRow>of();
                     }
                     String placeholders = String.join(
                             ",", Collections.nCopies(request.messageIds().size(), "?"));
@@ -1251,14 +1695,15 @@ public class ChatService
                     params.add(room.roomId());
                     params.addAll(request.messageIds());
 
-                    Map<String, Reference> found = new HashMap<>();
+                    Map<String, CardReferenceRow> found = new HashMap<>();
                     db.query(
                             """
-                            SELECT id, kind, ref_project_id, ref_target_id, ref_grant_type
-                            FROM chat_messages
-                            WHERE room_id = ?
-                              AND kind IN ('COMMIT_REF', 'WIP_REF', 'FILE_REF', 'CODE_COMMENT_REF')
-                              AND id IN (%s)
+                            SELECT m.id, m.kind, m.ref_project_id, m.ref_target_id, m.ref_grant_type, c.lifecycle_state
+                            FROM chat_messages m
+                            LEFT JOIN chat_doc_pdf_cards c ON c.message_id = m.id
+                            WHERE m.room_id = ?
+                              AND m.kind IN ('COMMIT_REF', 'WIP_REF', 'FILE_REF', 'CODE_COMMENT_REF', 'DOC_REF', 'PDF_REF')
+                              AND m.id IN (%s)
                             """.formatted(placeholders),
                             rs -> {
                                 String id = rs.getString(1);
@@ -1266,6 +1711,7 @@ public class ChatService
                                 String projectId = rs.getString(3);
                                 String targetId = rs.getString(4);
                                 String grantTypeRaw = rs.getString(5);
+                                String cardLifecycleState = rs.getString(6);
                                 if (targetId == null) {
                                     return;
                                 }
@@ -1274,9 +1720,24 @@ public class ChatService
                                             grantTypeRaw != null
                                                     ? GrantType.valueOf(grantTypeRaw)
                                                     : GrantType.SPACE_FILE;
-                                    found.put(id, new Reference(kind, null, targetId, grantType));
+                                    found.put(
+                                            id,
+                                            new CardReferenceRow(
+                                                    new Reference(kind, null, targetId, grantType),
+                                                    cardLifecycleState));
+                                } else if (kind == MessageKind.DOC_REF
+                                        || kind == MessageKind.PDF_REF) {
+                                    found.put(
+                                            id,
+                                            new CardReferenceRow(
+                                                    new Reference(kind, null, targetId),
+                                                    cardLifecycleState));
                                 } else if (projectId != null) {
-                                    found.put(id, new Reference(kind, projectId, targetId));
+                                    found.put(
+                                            id,
+                                            new CardReferenceRow(
+                                                    new Reference(kind, projectId, targetId),
+                                                    cardLifecycleState));
                                 }
                             },
                             params.toArray());
@@ -1289,9 +1750,15 @@ public class ChatService
 
         List<ResourceCardResult> results = new ArrayList<>(refsByMsgId.size());
         for (String messageId : request.messageIds()) {
-            Reference reference = refsByMsgId.get(messageId);
-            if (reference != null) {
-                CardView view = resolveCardView(userId, spaceId, membershipEpoch, reference);
+            CardReferenceRow cardRow = refsByMsgId.get(messageId);
+            if (cardRow != null) {
+                CardView view =
+                        resolveCardView(
+                                userId,
+                                spaceId,
+                                membershipEpoch,
+                                cardRow.reference(),
+                                cardRow.cardLifecycleState());
                 results.add(new ResourceCardResult(messageId, view));
             }
         }
@@ -1299,20 +1766,35 @@ public class ChatService
     }
 
     private CardView resolveCardView(
-            String userId, String spaceId, long membershipEpoch, Reference reference) {
+            String userId,
+            String spaceId,
+            long membershipEpoch,
+            Reference reference,
+            String cardLifecycleState) {
         ResourceCardVerifierPort verifier = findVerifier(reference.kind());
         if (verifier == null) {
             return CardView.forbidden();
         }
+        boolean forcePurged = "FORCE_PURGED".equals(cardLifecycleState);
+        boolean expiredOrDeleted = "EXPIRED_OR_DELETED".equals(cardLifecycleState);
         try {
             Preview preview = verifier.verify(userId, spaceId, membershipEpoch, reference);
             if (preview == null) {
                 return CardView.forbidden();
             }
             return switch (preview.state()) {
-                case ACTIVE -> CardView.available(preview.label());
+                case ACTIVE -> {
+                    if (forcePurged) {
+                        yield CardView.forcePurged();
+                    }
+                    if (expiredOrDeleted) {
+                        yield CardView.expiredOrDeleted();
+                    }
+                    yield CardView.available(preview.label());
+                }
                 case REVOKED_FOR_ACTOR -> CardView.forbidden();
-                case EXPIRED_OR_DELETED -> CardView.expiredOrDeleted();
+                case EXPIRED_OR_DELETED ->
+                        forcePurged ? CardView.forcePurged() : CardView.expiredOrDeleted();
                 case FORCE_PURGED -> CardView.forcePurged();
             };
         } catch (DomainException ex) {
@@ -1321,7 +1803,7 @@ public class ChatService
                         CardView.forbidden();
                 case KernelErrorCode.RESOURCE_EXPIRED_OR_PURGED,
                         KernelErrorCode.RESOURCE_NOT_FOUND ->
-                        CardView.expiredOrDeleted();
+                        forcePurged ? CardView.forcePurged() : CardView.expiredOrDeleted();
                 default -> throw ex;
             };
         }
@@ -1339,8 +1821,17 @@ public class ChatService
             case CodeCommentRefContent comment ->
                     new Reference(
                             MessageKind.CODE_COMMENT_REF, comment.projectId(), comment.commentId());
+            case DocRefContent doc ->
+                    new Reference(MessageKind.DOC_REF, null, doc.commentId());
+            case PdfRefContent pdf ->
+                    new Reference(MessageKind.PDF_REF, null, pdf.commentId());
             case TextContent ignored -> throw new IllegalStateException();
         };
+        requireResourceActive(userId, spaceId, membershipEpoch, reference);
+    }
+
+    private void requireResourceActive(
+            String userId, String spaceId, long membershipEpoch, Reference reference) {
         ResourceCardVerifierPort verifier = findVerifier(reference.kind());
         if (verifier == null) {
             throw new DomainException(KernelErrorCode.INVALID_REQUEST);
@@ -1584,7 +2075,7 @@ public class ChatService
                 membershipEpoch);
     }
 
-    private static ChatMessage mapChatMessage(java.sql.ResultSet rs) throws java.sql.SQLException {
+    private ChatMessage mapChatMessage(java.sql.ResultSet rs) throws java.sql.SQLException {
         String messageId = rs.getString(1);
         String roomId = rs.getString(2);
         long seq = rs.getLong(3);
@@ -1607,6 +2098,17 @@ public class ChatService
                         rs.getLong(17))
                 : null;
 
+        String cardDocumentId = rs.getString(18);
+        String cardPersistedVersionId = rs.getString(19);
+        String cardRelativeStart = rs.getString(20);
+        String cardRelativeEnd = rs.getString(21);
+        String cardFileId = rs.getString(22);
+        String cardFileVersionId = rs.getString(23);
+        Integer cardPageNumber = rs.getObject(24, Integer.class);
+        String cardRectanglesJson = rs.getString(25);
+        String cardLifecycleState = rs.getString(26);
+        boolean forcePurged = "FORCE_PURGED".equals(cardLifecycleState);
+
         MessageContent content = switch (kind) {
             case TEXT -> new TextContent(bodyText);
             case COMMIT_REF -> new CommitRefContent(refProjectId, refTargetId, refPurpose);
@@ -1620,8 +2122,23 @@ public class ChatService
             }
             case CODE_COMMENT_REF ->
                     new CodeCommentRefContent(refProjectId, refTargetId, refPurpose);
+            case DOC_REF ->
+                    new DocRefContent(
+                            cardDocumentId,
+                            refTargetId,
+                            cardPersistedVersionId,
+                            forcePurged ? null : cardRelativeStart,
+                            forcePurged ? null : cardRelativeEnd,
+                            refPurpose);
+            case PDF_REF ->
+                    new PdfRefContent(
+                            cardFileId,
+                            cardFileVersionId,
+                            refTargetId,
+                            cardPageNumber != null ? cardPageNumber : 1,
+                            forcePurged ? null : parseRectanglesOrNull(cardRectanglesJson),
+                            refPurpose);
             case SYSTEM -> new SystemContent(bodyText);
-            case DOC_REF, PDF_REF -> throw new DomainException(KernelErrorCode.INVALID_REQUEST);
         };
 
         return new ChatMessage(
@@ -1675,6 +2192,333 @@ public class ChatService
                 validateId(comment.projectId(), 64);
                 validateId(comment.commentId(), 128);
                 validatePurpose(comment.purpose());
+            }
+            case DocRefContent doc -> {
+                validateId(doc.documentId(), 64);
+                validateId(doc.commentId(), 64);
+                validateId(doc.persistedVersionId(), 64);
+                if (doc.relativeStart() != null || doc.relativeEnd() != null) {
+                    validateRelativePosition(doc.relativeStart());
+                    validateRelativePosition(doc.relativeEnd());
+                }
+                validatePurpose(doc.purpose());
+            }
+            case PdfRefContent pdf -> {
+                validateId(pdf.fileId(), 64);
+                validateId(pdf.fileVersionId(), 64);
+                validateId(pdf.commentId(), 64);
+                if (pdf.pageNumber() == null || pdf.pageNumber() < 1) {
+                    throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+                }
+                if (pdf.rectangles() != null) {
+                    validatePdfRectangles(pdf.rectangles());
+                }
+                validatePurpose(pdf.purpose());
+            }
+        }
+    }
+
+    private DocumentCommentAnchorRow loadDocumentCommentAnchor(
+            String spaceId, String documentId, String commentId) {
+        return db.query(
+                        """
+                        SELECT id, document_id, version_id, anchor_json, discussion_thread_id
+                        FROM document_comments
+                        WHERE id = ?
+                          AND space_id = ?
+                          AND kind = 'DOC_REF'
+                          AND document_id = ?
+                        """,
+                        (rs, i) -> {
+                            JsonNode anchor = readTree(rs.getString(4));
+                            String relativeStart =
+                                    anchor.hasNonNull("relativeStart")
+                                            ? anchor.get("relativeStart").asText()
+                                            : null;
+                            String relativeEnd =
+                                    anchor.hasNonNull("relativeEnd")
+                                            ? anchor.get("relativeEnd").asText()
+                                            : null;
+                            String quotedText =
+                                    anchor.hasNonNull("quotedText")
+                                            ? anchor.get("quotedText").asText()
+                                            : null;
+                            String contextBefore =
+                                    anchor.hasNonNull("contextBefore")
+                                            ? anchor.get("contextBefore").asText()
+                                            : null;
+                            String contextAfter =
+                                    anchor.hasNonNull("contextAfter")
+                                            ? anchor.get("contextAfter").asText()
+                                            : null;
+                            validateRelativePosition(relativeStart);
+                            validateRelativePosition(relativeEnd);
+                            return new DocumentCommentAnchorRow(
+                                    rs.getString(1),
+                                    MessageKind.DOC_REF,
+                                    rs.getString(2),
+                                    rs.getString(3),
+                                    relativeStart,
+                                    relativeEnd,
+                                    null,
+                                    null,
+                                    null,
+                                    null,
+                                    null,
+                                    quotedText,
+                                    contextBefore,
+                                    contextAfter,
+                                    rs.getString(5));
+                        },
+                        commentId,
+                        spaceId,
+                        documentId)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new DomainException(KernelErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    private DocumentCommentAnchorRow loadPdfCommentAnchor(
+            String spaceId, String fileId, String fileVersionId, String commentId) {
+        return db.query(
+                        """
+                        SELECT id, file_id, file_version_id, anchor_json, discussion_thread_id
+                        FROM document_comments
+                        WHERE id = ?
+                          AND space_id = ?
+                          AND kind = 'PDF_REF'
+                          AND file_id = ?
+                          AND file_version_id = ?
+                        """,
+                        (rs, i) -> {
+                            JsonNode anchor = readTree(rs.getString(4));
+                            int pageNumber = anchor.path("pageNumber").asInt(0);
+                            if (pageNumber < 1) {
+                                throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+                            }
+                            List<PdfSelectionRect> rectangles =
+                                    parseRectanglesNode(anchor.path("rectangles"));
+                            validatePdfRectangles(rectangles);
+                            String rectanglesJson = ChatSecrets.toJson(mapper, rectangles);
+                            String quotedText =
+                                    anchor.hasNonNull("quotedText")
+                                            ? anchor.get("quotedText").asText()
+                                            : null;
+                            String contextBefore =
+                                    anchor.hasNonNull("contextBefore")
+                                            ? anchor.get("contextBefore").asText()
+                                            : null;
+                            String contextAfter =
+                                    anchor.hasNonNull("contextAfter")
+                                            ? anchor.get("contextAfter").asText()
+                                            : null;
+                            return new DocumentCommentAnchorRow(
+                                    rs.getString(1),
+                                    MessageKind.PDF_REF,
+                                    null,
+                                    null,
+                                    null,
+                                    null,
+                                    rs.getString(2),
+                                    rs.getString(3),
+                                    pageNumber,
+                                    rectangles,
+                                    rectanglesJson,
+                                    quotedText,
+                                    contextBefore,
+                                    contextAfter,
+                                    rs.getString(5));
+                        },
+                        commentId,
+                        spaceId,
+                        fileId,
+                        fileVersionId)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new DomainException(KernelErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    private void requireSourceStillActiveInTx(String spaceId, DocumentCommentAnchorRow anchor) {
+        if (anchor.kind() == MessageKind.DOC_REF) {
+            List<String> states =
+                    db.queryForList(
+                            "SELECT lifecycle_state FROM documents WHERE id = ? AND space_id = ?",
+                            String.class,
+                            anchor.documentId(),
+                            spaceId);
+            if (states.isEmpty() || !"ACTIVE".equals(states.getFirst())) {
+                throw new DomainException(KernelErrorCode.RESOURCE_EXPIRED_OR_PURGED);
+            }
+        } else if (anchor.kind() == MessageKind.PDF_REF) {
+            List<String> states =
+                    db.queryForList(
+                            """
+                            SELECT lifecycle_state
+                            FROM files
+                            WHERE id = ?
+                              AND space_id = ?
+                              AND scope = 'SPACE_FILE'
+                              AND sha256_hex = ?
+                            """,
+                            String.class,
+                            anchor.fileId(),
+                            spaceId,
+                            anchor.fileVersionId());
+            if (states.isEmpty() || !"ACTIVE".equals(states.getFirst())) {
+                throw new DomainException(KernelErrorCode.RESOURCE_EXPIRED_OR_PURGED);
+            }
+        }
+    }
+
+    private void bindDiscussionThreadAnchor(
+            String roomId, String rootMsgId, MessageKind kind, String commentId) {
+        String sourceKind = kind == MessageKind.DOC_REF ? "DOC_COMMENT" : "PDF_COMMENT";
+        db.update(
+                """
+                UPDATE discussion_threads
+                SET source_kind = ?, source_anchor_id = ?
+                WHERE root_msg_id = ?
+                  AND room_id = ?
+                  AND source_kind = 'CHAT_MESSAGE'
+                """,
+                sourceKind,
+                commentId,
+                rootMsgId,
+                roomId);
+    }
+
+    private void insertDocPdfCardMetadata(
+            String messageId,
+            String roomId,
+            String discussionThreadId,
+            DocumentCommentAnchorRow anchor,
+            Timestamp createdAt) {
+        db.update(
+                """
+                INSERT INTO chat_doc_pdf_cards(
+                    message_id, room_id, kind, comment_id, discussion_thread_id,
+                    document_id, persisted_version_id, relative_start, relative_end,
+                    file_id, file_version_id, page_number, rectangles_json,
+                    quoted_text, context_before, context_after,
+                    lifecycle_state, lifecycle_version, invalidated_at, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 1, NULL, ?)
+                """,
+                messageId,
+                roomId,
+                anchor.kind().name(),
+                anchor.commentId(),
+                discussionThreadId,
+                anchor.documentId(),
+                anchor.persistedVersionId(),
+                anchor.relativeStart(),
+                anchor.relativeEnd(),
+                anchor.fileId(),
+                anchor.fileVersionId(),
+                anchor.pageNumber(),
+                anchor.rectanglesJson(),
+                anchor.quotedText(),
+                anchor.contextBefore(),
+                anchor.contextAfter(),
+                createdAt);
+    }
+
+    private static void verifySubmittedDocAnchor(
+            DocRefContent submitted, DocumentCommentAnchorRow authoritative) {
+        if (!authoritative.persistedVersionId().equals(submitted.persistedVersionId())) {
+            throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+        }
+        if (submitted.relativeStart() != null
+                && !authoritative.relativeStart().equals(submitted.relativeStart())) {
+            throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+        }
+        if (submitted.relativeEnd() != null
+                && !authoritative.relativeEnd().equals(submitted.relativeEnd())) {
+            throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    private static void verifySubmittedPdfAnchor(
+            PdfRefContent submitted, DocumentCommentAnchorRow authoritative) {
+        if (!authoritative.pageNumber().equals(submitted.pageNumber())) {
+            throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+        }
+        if (submitted.rectangles() != null) {
+            List<PdfSelectionRect> expected = authoritative.rectangles();
+            if (expected == null || submitted.rectangles().size() != expected.size()) {
+                throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+            }
+            for (int idx = 0; idx < expected.size(); idx++) {
+                PdfSelectionRect a = submitted.rectangles().get(idx);
+                PdfSelectionRect b = expected.get(idx);
+                if (Math.abs(a.left() - b.left()) > 1e-9
+                        || Math.abs(a.top() - b.top()) > 1e-9
+                        || Math.abs(a.right() - b.right()) > 1e-9
+                        || Math.abs(a.bottom() - b.bottom()) > 1e-9) {
+                    throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+                }
+            }
+        }
+    }
+
+    private List<PdfSelectionRect> parseRectanglesOrNull(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        return parseRectanglesNode(readTree(json));
+    }
+
+    private static List<PdfSelectionRect> parseRectanglesNode(JsonNode node) {
+        if (node == null || !node.isArray() || node.isEmpty()) {
+            return List.of();
+        }
+        List<PdfSelectionRect> rects = new ArrayList<>(node.size());
+        for (JsonNode item : node) {
+            rects.add(
+                    new PdfSelectionRect(
+                            item.path("left").asDouble(Double.NaN),
+                            item.path("top").asDouble(Double.NaN),
+                            item.path("right").asDouble(Double.NaN),
+                            item.path("bottom").asDouble(Double.NaN)));
+        }
+        return List.copyOf(rects);
+    }
+
+    private static void validateRelativePosition(String encoded) {
+        if (encoded == null || encoded.length() < 4 || encoded.length() > 1024) {
+            throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+        }
+        try {
+            byte[] decoded = Base64.getDecoder().decode(encoded);
+            if (decoded.length == 0 || decoded.length > 768) {
+                throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+            }
+        } catch (IllegalArgumentException ex) {
+            throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    private static void validatePdfRectangles(List<PdfSelectionRect> rectangles) {
+        if (rectangles == null || rectangles.isEmpty() || rectangles.size() > 128) {
+            throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+        }
+        for (PdfSelectionRect rect : rectangles) {
+            if (rect == null
+                    || rect.left() == null
+                    || rect.top() == null
+                    || rect.right() == null
+                    || rect.bottom() == null
+                    || !Double.isFinite(rect.left())
+                    || !Double.isFinite(rect.top())
+                    || !Double.isFinite(rect.right())
+                    || !Double.isFinite(rect.bottom())
+                    || rect.left() < 0.0
+                    || rect.top() < 0.0
+                    || rect.right() > 1.0
+                    || rect.bottom() > 1.0
+                    || !(rect.left() < rect.right())
+                    || !(rect.top() < rect.bottom())) {
+                throw new DomainException(KernelErrorCode.INVALID_REQUEST);
             }
         }
     }

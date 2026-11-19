@@ -8,6 +8,7 @@ import com.orbitspace.modules.chat.ChatDtos.AdvanceReadRequest;
 import com.orbitspace.modules.chat.ChatDtos.ChangeDiscussionRequest;
 import com.orbitspace.modules.chat.ChatDtos.Discussion;
 import com.orbitspace.modules.chat.ChatDtos.EventPage;
+import com.orbitspace.modules.chat.ChatDtos.ForwardCommentRequest;
 import com.orbitspace.modules.chat.ChatDtos.HistoryPage;
 import com.orbitspace.modules.chat.ChatDtos.MessageAck;
 import com.orbitspace.modules.chat.ChatDtos.ReadCursorResponse;
@@ -152,6 +153,50 @@ public class ChatController {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .body(results);
+    }
+
+    @PostMapping(
+            "/api/v1/spaces/{spaceId}/documents/{documentId}/comments/{commentId}/forward-chat")
+    @RequireSpaceRole(SpaceRole.MEMBER)
+    public MessageAck forwardDocumentComment(
+            @AuthenticationPrincipal AuthenticatedPrincipal account,
+            @PathVariable String spaceId,
+            @PathVariable String documentId,
+            @PathVariable String commentId,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey,
+            @Valid @RequestBody ForwardCommentRequest body,
+            HttpServletRequest request) {
+        return chat.forwardDocumentComment(
+                spaceId,
+                documentId,
+                commentId,
+                account.userId(),
+                membershipEpoch(request),
+                idempotencyKey,
+                body);
+    }
+
+    @PostMapping(
+            "/api/v1/spaces/{spaceId}/files/{fileId}/versions/{fileVersionId}/pdf-comments/{commentId}/forward-chat")
+    @RequireSpaceRole(SpaceRole.MEMBER)
+    public MessageAck forwardPdfComment(
+            @AuthenticationPrincipal AuthenticatedPrincipal account,
+            @PathVariable String spaceId,
+            @PathVariable String fileId,
+            @PathVariable String fileVersionId,
+            @PathVariable String commentId,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey,
+            @Valid @RequestBody ForwardCommentRequest body,
+            HttpServletRequest request) {
+        return chat.forwardPdfComment(
+                spaceId,
+                fileId,
+                fileVersionId,
+                commentId,
+                account.userId(),
+                membershipEpoch(request),
+                idempotencyKey,
+                body);
     }
 
     private static long membershipEpoch(HttpServletRequest request) {
