@@ -34,6 +34,7 @@ public class IntegrationJobResultController {
 
     private final IntegrationHmacSupport hmac;
     private final IntegrationJobResultService service;
+    private final IntegrationEgressService egress;
     private final ObjectMapper mapper;
     private final Validator validator;
 
@@ -41,11 +42,21 @@ public class IntegrationJobResultController {
             IntegrationHmacSupport hmac,
             IntegrationJobResultService service,
             ObjectMapper mapper,
-            Validator validator) {
+            IntegrationEgressService egress, Validator validator) {
         this.hmac = hmac;
         this.service = service;
+        this.egress = egress;
         this.mapper = mapper;
         this.validator = validator;
+    }
+
+    record LeaseInput(@jakarta.validation.constraints.NotBlank String leaseId, boolean checkOnly) {}
+
+    @PostMapping(value = "/internal/v1/jobs/{jobId}/input", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public org.springframework.http.ResponseEntity<?> input(@PathVariable String jobId, HttpServletRequest request) {
+        var body = parseAndValidate(hmac.verifyAndReadBody(request),LeaseInput.class);
+        return org.springframework.http.ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore())
+                .body(egress.workerInput(jobId,body.leaseId(),body.checkOnly()));
     }
 
     @PostMapping(

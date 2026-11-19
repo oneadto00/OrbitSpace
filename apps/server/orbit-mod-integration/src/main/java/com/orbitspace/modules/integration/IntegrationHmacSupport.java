@@ -84,7 +84,7 @@ public class IntegrationHmacSupport {
         }
 
         long nowEpoch = Instant.now().getEpochSecond();
-        if (Math.abs(nowEpoch - timestampEpoch) > allowedSkewSeconds) {
+        if (timestampEpoch < nowEpoch - allowedSkewSeconds || timestampEpoch > nowEpoch + allowedSkewSeconds) {
             throw new DomainException(KernelErrorCode.AUTH_UNAUTHORIZED);
         }
 

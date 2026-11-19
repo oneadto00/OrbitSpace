@@ -10,15 +10,31 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
 import java.util.List;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.orbitspace.kernel.OutboxEventHandler;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 /** Spring Boot auto-configuration for P2 internal worker callback endpoints and HMAC anti-replay. */
 @AutoConfiguration
 @Import({
     IntegrationHmacSupport.class,
+    IntegrationEgressService.class,
+    IntegrationCollabController.class,
+    IntegrationCollabEventHandler.class,
     IntegrationJobResultService.class,
     IntegrationJobResultController.class
 })
 public class IntegrationAutoConfiguration {
+    @Bean
+    OutboxEventHandler membershipCollabControl(StringRedisTemplate redis, ObjectMapper json) {
+        return new IntegrationCollabControlHandler("MEMBERSHIP_REVOKED",redis,json);
+    }
+
+    @Bean
+    OutboxEventHandler documentCollabControl(StringRedisTemplate redis, ObjectMapper json) {
+        return new IntegrationCollabControlHandler("DOCUMENT_",redis,json);
+    }
+
     @Bean
     ModuleSecurityCustomizer integrationRoutes() {
         // Registered as PUBLIC + csrfExempt so CredentialFilter does not treat worker calls as user JWTs;
@@ -26,6 +42,11 @@ public class IntegrationAutoConfiguration {
         return () ->
                 List.of(
                         internalRoute("/internal/v1/jobs/{jobId}/claim"),
+                        internalRoute("/internal/v1/jobs/{jobId}/input"),
+                        internalRoute("/internal/v1/collab/authenticate"),
+                        internalRoute("/internal/v1/collab/load"),
+                        internalRoute("/internal/v1/collab/store-batch"),
+                        internalRoute("/internal/v1/collab/revoke-check"),
                         internalRoute("/internal/v1/jobs/{jobId}/output"),
                         internalRoute("/internal/v1/jobs/{jobId}/result"),
                         internalRoute("/internal/v1/jobs/{jobId}/fail"));
