@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.orbitspace.kernel.DiscussionStatus;
+import com.orbitspace.kernel.GrantType;
 import com.orbitspace.kernel.MessageKind;
 
 import jakarta.validation.Valid;
@@ -31,6 +32,8 @@ public final class ChatDtos {
         @JsonSubTypes.Type(value = TextContent.class, name = "TEXT"),
         @JsonSubTypes.Type(value = CommitRefContent.class, name = "COMMIT_REF"),
         @JsonSubTypes.Type(value = WipRefContent.class, name = "WIP_REF"),
+        @JsonSubTypes.Type(value = FileRefContent.class, name = "FILE_REF"),
+        @JsonSubTypes.Type(value = CodeCommentRefContent.class, name = "CODE_COMMENT_REF"),
         @JsonSubTypes.Type(value = SystemContent.class, name = "SYSTEM")
     })
     public sealed interface MessageContent permits ClientContent, SystemContent {
@@ -41,10 +44,16 @@ public final class ChatDtos {
     @JsonSubTypes({
         @JsonSubTypes.Type(value = TextContent.class, name = "TEXT"),
         @JsonSubTypes.Type(value = CommitRefContent.class, name = "COMMIT_REF"),
-        @JsonSubTypes.Type(value = WipRefContent.class, name = "WIP_REF")
+        @JsonSubTypes.Type(value = WipRefContent.class, name = "WIP_REF"),
+        @JsonSubTypes.Type(value = FileRefContent.class, name = "FILE_REF"),
+        @JsonSubTypes.Type(value = CodeCommentRefContent.class, name = "CODE_COMMENT_REF")
     })
     public sealed interface ClientContent extends MessageContent
-            permits TextContent, CommitRefContent, WipRefContent {}
+            permits TextContent,
+                    CommitRefContent,
+                    WipRefContent,
+                    FileRefContent,
+                    CodeCommentRefContent {}
 
     public record TextContent(@NotNull @Size(min = 1, max = 8000) String text)
             implements ClientContent {
@@ -73,6 +82,28 @@ public final class ChatDtos {
         @Override
         public MessageKind messageKind() {
             return MessageKind.WIP_REF;
+        }
+    }
+
+    public record FileRefContent(
+            @NotBlank @Size(min = 1, max = 160) String targetId,
+            @NotNull GrantType grantType,
+            @JsonInclude(JsonInclude.Include.NON_NULL) @Size(min = 1, max = 4000) String purpose)
+            implements ClientContent {
+        @Override
+        public MessageKind messageKind() {
+            return MessageKind.FILE_REF;
+        }
+    }
+
+    public record CodeCommentRefContent(
+            @NotBlank @Size(min = 1, max = 160) String projectId,
+            @NotBlank @Size(min = 1, max = 160) String commentId,
+            @JsonInclude(JsonInclude.Include.NON_NULL) @Size(min = 1, max = 4000) String purpose)
+            implements ClientContent {
+        @Override
+        public MessageKind messageKind() {
+            return MessageKind.CODE_COMMENT_REF;
         }
     }
 

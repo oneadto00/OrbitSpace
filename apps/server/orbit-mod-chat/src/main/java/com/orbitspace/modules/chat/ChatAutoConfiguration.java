@@ -18,6 +18,8 @@ import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 
 /** Spring Boot auto-configuration registering chat routes, WebSocket endpoint, and Redis fan-out. */
 @AutoConfiguration
@@ -57,6 +59,12 @@ public class ChatAutoConfiguration {
         container.addMessageListener(
                 chatWsHandler, new ChannelTopic(ChatService.ROOM_EVENTS_CHANNEL));
         return container;
+    }
+
+    @Bean("orbitChatThreadReply")
+    Function<Map<String, Object>, Map<String, Object>> orbitChatThreadReply(
+            ChatService chatService) {
+        return chatService::replyToDiscussionThread;
     }
 
     private static Route accountRoute(String method, String pathPattern) {
