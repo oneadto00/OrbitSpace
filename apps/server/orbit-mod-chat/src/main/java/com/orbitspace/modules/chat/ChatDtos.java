@@ -34,6 +34,8 @@ public final class ChatDtos {
         @JsonSubTypes.Type(value = WipRefContent.class, name = "WIP_REF"),
         @JsonSubTypes.Type(value = FileRefContent.class, name = "FILE_REF"),
         @JsonSubTypes.Type(value = CodeCommentRefContent.class, name = "CODE_COMMENT_REF"),
+        @JsonSubTypes.Type(value = DocRefContent.class, name = "DOC_REF"),
+        @JsonSubTypes.Type(value = PdfRefContent.class, name = "PDF_REF"),
         @JsonSubTypes.Type(value = SystemContent.class, name = "SYSTEM")
     })
     public sealed interface MessageContent permits ClientContent, SystemContent {
@@ -46,14 +48,18 @@ public final class ChatDtos {
         @JsonSubTypes.Type(value = CommitRefContent.class, name = "COMMIT_REF"),
         @JsonSubTypes.Type(value = WipRefContent.class, name = "WIP_REF"),
         @JsonSubTypes.Type(value = FileRefContent.class, name = "FILE_REF"),
-        @JsonSubTypes.Type(value = CodeCommentRefContent.class, name = "CODE_COMMENT_REF")
+        @JsonSubTypes.Type(value = CodeCommentRefContent.class, name = "CODE_COMMENT_REF"),
+        @JsonSubTypes.Type(value = DocRefContent.class, name = "DOC_REF"),
+        @JsonSubTypes.Type(value = PdfRefContent.class, name = "PDF_REF")
     })
     public sealed interface ClientContent extends MessageContent
             permits TextContent,
                     CommitRefContent,
                     WipRefContent,
                     FileRefContent,
-                    CodeCommentRefContent {}
+                    CodeCommentRefContent,
+                    DocRefContent,
+                    PdfRefContent {}
 
     public record TextContent(@NotNull @Size(min = 1, max = 8000) String text)
             implements ClientContent {
@@ -106,6 +112,55 @@ public final class ChatDtos {
             return MessageKind.CODE_COMMENT_REF;
         }
     }
+
+    public record PdfSelectionRect(
+            @NotNull Double left,
+            @NotNull Double top,
+            @NotNull Double right,
+            @NotNull Double bottom) {}
+
+    public record DocRefContent(
+            @NotBlank @Size(min = 1, max = 160) String documentId,
+            @NotBlank @Size(min = 1, max = 160) String commentId,
+            @NotBlank @Size(min = 1, max = 160) String persistedVersionId,
+            @JsonInclude(JsonInclude.Include.NON_NULL)
+                    @Size(min = 4, max = 1024)
+                    @Pattern(
+                            regexp =
+                                    "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$")
+                    String relativeStart,
+            @JsonInclude(JsonInclude.Include.NON_NULL)
+                    @Size(min = 4, max = 1024)
+                    @Pattern(
+                            regexp =
+                                    "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$")
+                    String relativeEnd,
+            @JsonInclude(JsonInclude.Include.NON_NULL) @Size(min = 1, max = 4000) String purpose)
+            implements ClientContent {
+        @Override
+        public MessageKind messageKind() {
+            return MessageKind.DOC_REF;
+        }
+    }
+
+    public record PdfRefContent(
+            @NotBlank @Size(min = 1, max = 160) String fileId,
+            @NotBlank @Size(min = 1, max = 160) String fileVersionId,
+            @NotBlank @Size(min = 1, max = 160) String commentId,
+            @NotNull @Min(1) Integer pageNumber,
+            @JsonInclude(JsonInclude.Include.NON_NULL) @Size(min = 1, max = 128)
+                    List<@Valid PdfSelectionRect> rectangles,
+            @JsonInclude(JsonInclude.Include.NON_NULL) @Size(min = 1, max = 4000) String purpose)
+            implements ClientContent {
+        @Override
+        public MessageKind messageKind() {
+            return MessageKind.PDF_REF;
+        }
+    }
+
+    public record ForwardCommentRequest(
+            @NotBlank @Size(min = 1, max = 160) String clientMsgId,
+            @JsonInclude(JsonInclude.Include.NON_NULL) @Size(min = 1, max = 4000) String purpose) {}
 
     public record SystemContent(@NotNull @Size(min = 1) String text) implements MessageContent {
         @Override

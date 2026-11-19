@@ -37,6 +37,12 @@ public class ChatAutoConfiguration {
                 accountRoute("PUT", "/api/v1/spaces/{spaceId}/chat/read"),
                 accountRoute("PUT", "/api/v1/spaces/{spaceId}/chat/messages/{messageId}/discussion"),
                 accountRoute("POST", "/api/v1/spaces/{spaceId}/chat/cards/resolve"),
+                accountRoute(
+                        "POST",
+                        "/api/v1/spaces/{spaceId}/documents/{documentId}/comments/{commentId}/forward-chat"),
+                accountRoute(
+                        "POST",
+                        "/api/v1/spaces/{spaceId}/files/{fileId}/versions/{fileVersionId}/pdf-comments/{commentId}/forward-chat"),
                 new Route("GET", "/ws/chat", PUBLIC, true));
     }
 
