@@ -1,0 +1,272 @@
+.remote-git-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+.remote-git-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.remote-git-title {
+  display: grid;
+  gap: 4px;
+}
+
+.remote-git-title h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 1.04rem;
+}
+
+.remote-git-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.remote-git-policy-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px solid #c5d8cc;
+  background: #f4f9f5;
+  color: #1f4d3a;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.remote-git-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fcfdfb;
+}
+
+.remote-git-card h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.93rem;
+}
+
+.remote-git-bind-form {
+  display: grid;
+  gap: 10px;
+}
+
+.remote-git-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.remote-git-source-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.remote-git-source-item {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #ffffff;
+}
+
+.remote-git-source-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.remote-git-source-url {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.remote-git-source-url strong {
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+.remote-git-source-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.remote-git-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 620;
+  border: 1px solid transparent;
+}
+
+.remote-git-pill.tone-ok {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
+}
+
+.remote-git-pill.tone-warn {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fcd34d;
+}
+
+.remote-git-pill.tone-danger {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+
+.remote-git-pill.tone-muted {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
+.remote-git-obs-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.remote-git-obs-cell {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: #f8faf8;
+  border: 1px solid #e4ebe5;
+  font-size: 0.76rem;
+}
+
+.remote-git-obs-cell span {
+  color: var(--muted);
+}
+
+.remote-git-obs-cell strong {
+  font-size: 0.83rem;
+}
+
+.remote-git-source-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.remote-git-inline-box {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #c5d8cc;
+  background: #f7faf7;
+}
+
+.remote-git-inline-box.is-danger {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+.remote-git-receipt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  color: #166534;
+  font-size: 0.78rem;
+}
+
+.remote-git-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.remote-git-compare-result {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #bfcac1;
+  background: #ffffff;
+}
+
+.remote-git-compare-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.remote-git-conflict-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.remote-git-conflict-row {
+  display: grid;
+  gap: 4px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid #fca5a5;
+  background: #fef2f2;
+  font-size: 0.8rem;
+}
+
+.remote-git-conflict-row code {
+  font-size: 0.75rem;
+}
+
+@media (max-width: 900px) {
+  .remote-git-form-grid,
+  .remote-git-obs-grid,
+  .remote-git-compare-grid,
+  .remote-git-compare-metrics {
+    grid-template-columns: 1fr;
+  }
+}

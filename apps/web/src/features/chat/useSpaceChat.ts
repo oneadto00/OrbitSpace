@@ -2,13 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   CardView,
   ChangeDiscussion,
-  ChatMessage,
   Discussion,
   MessageAck,
-  RoomEvent,
   RoomInfo,
-  SendMessage,
-  WsEnvelope,
 } from "@orbitspace/shared-types";
 import {
   bindSpaceConnection,
@@ -30,6 +26,10 @@ import {
   issueWsTicket,
   resolveResourceCards,
   sendMessageHttp,
+  type P3ChatMessage,
+  type P3RoomEvent,
+  type P3SendMessage,
+  type P3WsEnvelope,
 } from "./chatApi";
 
 export type WsConnectionStatus =
@@ -41,7 +41,7 @@ export type WsConnectionStatus =
 
 export interface PendingOutgoingMessage {
   clientMsgId: string;
-  payload: SendMessage;
+  payload: P3SendMessage;
   createdAt: string;
   status: "sending" | "acked" | "failed";
   errorMessage?: string;
@@ -69,23 +69,25 @@ function isAbortError(error: unknown): boolean {
   );
 }
 
-function sortMessagesBySeq(map: Map<string, ChatMessage>): ChatMessage[] {
+function sortMessagesBySeq(map: Map<string, P3ChatMessage>): P3ChatMessage[] {
   return [...map.values()].sort((a, b) => {
     if (a.seq !== b.seq) return a.seq - b.seq;
     return a.messageId.localeCompare(b.messageId);
   });
 }
 
-function isCardMessage(msg: ChatMessage): boolean {
+function isCardMessage(msg: P3ChatMessage): boolean {
   return (
     msg.content.kind === "COMMIT_REF" ||
     msg.content.kind === "WIP_REF" ||
     msg.content.kind === "FILE_REF" ||
-    msg.content.kind === "CODE_COMMENT_REF"
+    msg.content.kind === "CODE_COMMENT_REF" ||
+    msg.content.kind === "DOC_REF" ||
+    msg.content.kind === "PDF_REF"
   );
 }
 
-function extractCardMessageIds(messages: Iterable<ChatMessage>): string[] {
+function extractCardMessageIds(messages: Iterable<P3ChatMessage>): string[] {
   const ids: string[] = [];
   for (const msg of messages) {
     if (isCardMessage(msg)) {
@@ -95,7 +97,7 @@ function extractCardMessageIds(messages: Iterable<ChatMessage>): string[] {
   return ids;
 }
 
-function maxSeqInMessages(messages: Iterable<ChatMessage>): number {
+function maxSeqInMessages(messages: Iterable<P3ChatMessage>): number {
   let max = 0;
   for (const msg of messages) {
     if (msg.seq > max) max = msg.seq;
@@ -118,7 +120,7 @@ export function useSpaceChat({
   isRevoked,
 }: UseSpaceChatOptions) {
   const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<P3ChatMessage[]>([]);
   const [pendingMessages, setPendingMessages] = useState<PendingOutgoingMessage[]>([]);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [loadingInitial, setLoadingInitial] = useState(false);
@@ -148,7 +150,7 @@ export function useSpaceChat({
   accessRef.current = access;
 
   const roomIdRef = useRef<string | null>(null);
-  const messagesMapRef = useRef<Map<string, ChatMessage>>(new Map());
+  const messagesMapRef = useRef<Map<string, P3ChatMessage>>(new Map());
   const nextBeforeSeqRef = useRef<number | null>(null);
   const eventSeqRef = useRef(0);
   const lastReadSeqRef = useRef(0);
@@ -367,7 +369,7 @@ export function useSpaceChat({
   );
 
   const applyRoomEvents = useCallback(
-    (events: RoomEvent[]): { cardMessageIds: string[]; maxNewSeq: number } => {
+    (events: P3RoomEvent[]): { cardMessageIds: string[]; maxNewSeq: number } => {
       let messagesChanged = false;
       const cardMessageIds = new Set<string>();
       const invalidatedCardIds = new Set<string>();
@@ -399,7 +401,7 @@ export function useSpaceChat({
             pendingDiscussionsRef.current.delete(incoming.messageId);
           }
 
-          const mergedMessage: ChatMessage = {
+          const mergedMessage: P3ChatMessage = {
             ...incoming,
             discussion: mergedDiscussion,
           };
@@ -762,7 +764,7 @@ export function useSpaceChat({
   );
 
   const handleLiveRoomEvent = useCallback(
-    (event: RoomEvent) => {
+    (event: P3RoomEvent) => {
       if (roomIdRef.current && event.roomId !== roomIdRef.current) return;
 
       const expectedNext = eventSeqRef.current + 1;
@@ -897,7 +899,7 @@ export function useSpaceChat({
 
           heartbeatTimerRef.current = window.setInterval(() => {
             if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: "PING" } satisfies WsEnvelope));
+              ws.send(JSON.stringify({ type: "PING" } satisfies P3WsEnvelope));
             }
           }, HEARTBEAT_INTERVAL_MS);
 
@@ -913,9 +915,9 @@ export function useSpaceChat({
             return;
           }
           if (typeof event.data !== "string") return;
-          let frame: WsEnvelope;
+          let frame: P3WsEnvelope;
           try {
-            frame = JSON.parse(event.data) as WsEnvelope;
+            frame = JSON.parse(event.data) as P3WsEnvelope;
           } catch {
             return;
           }
@@ -1143,7 +1145,7 @@ export function useSpaceChat({
           msg.discussion,
         );
         mergedDisc = pickNewerDiscussion(mergedDisc, pendingDisc);
-        const merged: ChatMessage = {
+        const merged: P3ChatMessage = {
           ...msg,
           discussion: mergedDisc,
         };
@@ -1175,7 +1177,7 @@ export function useSpaceChat({
   }, [loadingOlder, resolveCardsBatch, spaceId]);
 
   const sendViaHttp = useCallback(
-    async (payload: SendMessage, capturedGen: number) => {
+    async (payload: P3SendMessage, capturedGen: number) => {
       const currentAccess = accessRef.current;
       const signal = roomAbortRef.current?.signal;
       if (!currentAccess || !signal || signal.aborted || revokedLocallyRef.current) {
@@ -1212,7 +1214,7 @@ export function useSpaceChat({
   );
 
   const dispatchOutgoingPayload = useCallback(
-    async (payload: SendMessage) => {
+    async (payload: P3SendMessage) => {
       const currentAccess = accessRef.current;
       const signal = roomAbortRef.current?.signal;
       if (!currentAccess || !signal || signal.aborted || revokedLocallyRef.current) {
@@ -1224,7 +1226,7 @@ export function useSpaceChat({
 
       if (ws && ws.readyState === WebSocket.OPEN) {
         try {
-          ws.send(JSON.stringify({ type: "SEND_MSG", payload } satisfies WsEnvelope));
+          ws.send(JSON.stringify({ type: "SEND_MSG", payload } satisfies P3WsEnvelope));
           const existingTimer = ackFallbackTimersRef.current.get(payload.clientMsgId);
           if (existingTimer !== undefined) {
             window.clearTimeout(existingTimer);
@@ -1256,9 +1258,9 @@ export function useSpaceChat({
   );
 
   const sendMessage = useCallback(
-    async (input: { content: SendMessage["content"]; replyToMsgId?: string }) => {
+    async (input: { content: P3SendMessage["content"]; replyToMsgId?: string }) => {
       const clientMsgId = makeIdempotencyKey();
-      const payload: SendMessage = {
+      const payload: P3SendMessage = {
         clientMsgId,
         ...(input.replyToMsgId ? { replyToMsgId: input.replyToMsgId } : {}),
         content: input.content,

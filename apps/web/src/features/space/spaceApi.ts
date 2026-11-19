@@ -1,11 +1,18 @@
 import type {
+  AiSourceKind,
   ApiError,
   CreateInvite,
+  DocumentComment,
+  DocumentInfo,
+  DocumentSavedBoundary,
+  DocumentVersion,
+  DocumentVersionPage,
   ErrorCode,
   GitProject,
   Invite,
   InviteRole,
   Member,
+  SpaceAiPolicy,
   SpaceDetail,
   SpaceRole,
   SpaceSummary,
@@ -43,7 +50,42 @@ const DOMAIN_ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   DOWNLOAD_LIMIT_EXCEEDED: "已达到该空投为你设置的下载次数上限。",
   NOT_FRIENDS_FOR_AIRDROP: "只能向当前有效好友发起独立文件空投，请先确认好友关系。",
   DIFF_DATA_INSUFFICIENT: "两端点共享内容或基础对象不足以计算完整差异，请按提示使用 CLI 补传。",
+  REMOTE_URL_FORBIDDEN:
+    "受控策略拒绝该远端地址：仅允许受信任托管平台的 HTTPS（443 端口）地址，禁止用户信息、查询参数或非法协议。",
+  SSRF_TARGET_BLOCKED: "受控出口代理已拦截目标地址（内网/保留网段或受限重定向）。",
+  AI_DISABLED_IN_SPACE: "当前空间尚未启用 AI 辅助摘要，请联系空间管理员开启。",
+  DOC_ANCHOR_UNPERSISTED: "所选文档内容尚未持久化保存或版本边界已变化，请等待保存完成后重试。",
+  COLLAB_REVOKED: "文档协同访问授权已撤销，请重新核对空间权限。",
   INTERNAL_ERROR: "服务处理出现异常，请稍后重试。",
+};
+
+export const ALL_AI_SOURCE_KINDS: AiSourceKind[] = [
+  "DOCUMENT_VERSION",
+  "PDF_VERSION",
+  "GIT_SNAPSHOT",
+  "CHAT_MESSAGE",
+];
+
+export const AI_SOURCE_KIND_META: Record<
+  AiSourceKind,
+  { label: string; description: string }
+> = {
+  DOCUMENT_VERSION: {
+    label: "协作文档版本",
+    description: "允许读取发起人有权访问的已保存协作文档历史版本。",
+  },
+  PDF_VERSION: {
+    label: "PDF 资料版本",
+    description: "允许读取空间文件区中已安全解析的只读 PDF 分页文本。",
+  },
+  GIT_SNAPSHOT: {
+    label: "Git WIP 快照",
+    description: "允许读取发起人有权查看的已授权 WIP 补丁与共享说明。",
+  },
+  CHAT_MESSAGE: {
+    label: "主群聊文本消息",
+    description: "允许读取空间主群聊中的普通文本讨论消息。",
+  },
 };
 
 /** Generate a fresh UUID idempotency key with fallback for older runtimes. */
@@ -270,6 +312,155 @@ export function createGitProject(
   return api<GitProject>(
     `/spaces/${encodeURIComponent(spaceId)}/projects`,
     jsonRequest({ name }, "POST", { "Idempotency-Key": idempotencyKey }),
+    access,
+  );
+}
+
+export function getSpaceAiConfig(
+  spaceId: string,
+  access: SpaceAccess,
+  signal?: AbortSignal,
+): Promise<SpaceAiPolicy> {
+  return api<SpaceAiPolicy>(
+    `/spaces/${encodeURIComponent(spaceId)}/ai/config`,
+    { signal },
+    access,
+  );
+}
+
+export function updateSpaceAiConfig(
+  spaceId: string,
+  payload: SpaceAiPolicy,
+  access: SpaceAccess,
+  idempotencyKey: string,
+): Promise<SpaceAiPolicy> {
+  return api<SpaceAiPolicy>(
+    `/spaces/${encodeURIComponent(spaceId)}/ai/config`,
+    jsonRequest(payload, "PUT", { "Idempotency-Key": idempotencyKey }),
+    access,
+  );
+}
+
+export function listSpaceDocuments(
+  spaceId: string,
+  access: SpaceAccess,
+  signal?: AbortSignal,
+): Promise<DocumentInfo[]> {
+  return api<DocumentInfo[]>(
+    `/spaces/${encodeURIComponent(spaceId)}/documents`,
+    { signal },
+    access,
+  );
+}
+
+export function createSpaceDocument(
+  spaceId: string,
+  title: string,
+  access: SpaceAccess,
+  idempotencyKey: string,
+): Promise<DocumentInfo> {
+  return api<DocumentInfo>(
+    `/spaces/${encodeURIComponent(spaceId)}/documents`,
+    jsonRequest({ title }, "POST", { "Idempotency-Key": idempotencyKey }),
+    access,
+  );
+}
+
+export function deleteSpaceDocument(
+  spaceId: string,
+  documentId: string,
+  access: SpaceAccess,
+  idempotencyKey: string,
+): Promise<void> {
+  return api<void>(
+    `/spaces/${encodeURIComponent(spaceId)}/documents/${encodeURIComponent(documentId)}`,
+    {
+      method: "DELETE",
+      headers: { "Idempotency-Key": idempotencyKey },
+    },
+    access,
+  );
+}
+
+export function getDocumentSavedBoundary(
+  spaceId: string,
+  documentId: string,
+  access: SpaceAccess,
+  signal?: AbortSignal,
+): Promise<DocumentSavedBoundary> {
+  return api<DocumentSavedBoundary>(
+    `/spaces/${encodeURIComponent(spaceId)}/documents/${encodeURIComponent(documentId)}/saved-boundary`,
+    { signal },
+    access,
+  );
+}
+
+export function listDocumentVersions(
+  spaceId: string,
+  documentId: string,
+  access: SpaceAccess,
+  signal?: AbortSignal,
+): Promise<DocumentVersionPage> {
+  return api<DocumentVersionPage>(
+    `/spaces/${encodeURIComponent(spaceId)}/documents/${encodeURIComponent(documentId)}/versions`,
+    { signal },
+    access,
+  );
+}
+
+export function createDocumentVersion(
+  spaceId: string,
+  documentId: string,
+  expectedPersistedBatchSeq: number,
+  access: SpaceAccess,
+  idempotencyKey: string,
+): Promise<DocumentVersion> {
+  return api<DocumentVersion>(
+    `/spaces/${encodeURIComponent(spaceId)}/documents/${encodeURIComponent(documentId)}/versions`,
+    jsonRequest({ expectedPersistedBatchSeq }, "POST", { "Idempotency-Key": idempotencyKey }),
+    access,
+  );
+}
+
+export function exportDocumentVersionMarkdown(
+  spaceId: string,
+  documentId: string,
+  versionId: string,
+  access: SpaceAccess,
+  signal?: AbortSignal,
+): Promise<{ markdown: string; persistedVersionId: string }> {
+  return api<{ markdown: string; persistedVersionId: string }>(
+    `/spaces/${encodeURIComponent(spaceId)}/documents/${encodeURIComponent(documentId)}/versions/${encodeURIComponent(versionId)}/markdown`,
+    { signal },
+    access,
+  );
+}
+
+export function importDocumentMarkdown(
+  spaceId: string,
+  documentId: string,
+  payload: { markdown: string; expectedPersistedBatchSeq: number },
+  access: SpaceAccess,
+  idempotencyKey: string,
+): Promise<DocumentSavedBoundary> {
+  return api<DocumentSavedBoundary>(
+    `/spaces/${encodeURIComponent(spaceId)}/documents/${encodeURIComponent(documentId)}/markdown`,
+    jsonRequest(payload, "POST", { "Idempotency-Key": idempotencyKey }),
+    access,
+  );
+}
+
+export function locateDocumentComment(
+  spaceId: string,
+  documentId: string,
+  commentId: string,
+  view: "CURRENT" | "QUOTED_VERSION",
+  access: SpaceAccess,
+  signal?: AbortSignal,
+): Promise<DocumentComment> {
+  return api<DocumentComment>(
+    `/spaces/${encodeURIComponent(spaceId)}/documents/${encodeURIComponent(documentId)}/comments/${encodeURIComponent(commentId)}?view=${view}`,
+    { signal },
     access,
   );
 }
