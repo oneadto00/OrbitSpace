@@ -8,6 +8,9 @@ COPY orbit-mod-identity orbit-mod-identity
 COPY orbit-mod-space orbit-mod-space
 COPY orbit-mod-chat orbit-mod-chat
 COPY orbit-mod-gitproject orbit-mod-gitproject
+COPY orbit-mod-friendship orbit-mod-friendship
+COPY orbit-mod-file orbit-mod-file
+COPY orbit-mod-integration orbit-mod-integration
 COPY orbit-app orbit-app
 RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp clean package -DskipTests
 
