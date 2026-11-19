@@ -2,5 +2,9 @@ packages:
   - packages/*
   - apps/web
   - apps/cli
+  - services/collab-hocuspocus
 allowBuilds:
   esbuild: true
+catalog:
+  yjs: 13.6.33
+  y-protocols: 1.0.7

@@ -58,7 +58,12 @@
         "SHARE_REVOKED",
         "DOWNLOAD_LIMIT_EXCEEDED",
         "NOT_FRIENDS_FOR_AIRDROP",
-        "DIFF_DATA_INSUFFICIENT"
+        "DIFF_DATA_INSUFFICIENT",
+        "REMOTE_URL_FORBIDDEN",
+        "SSRF_TARGET_BLOCKED",
+        "AI_DISABLED_IN_SPACE",
+        "DOC_ANCHOR_UNPERSISTED",
+        "COLLAB_REVOKED"
       ]
     },
     "SpaceRole": {
@@ -178,6 +183,19 @@
           "additionalProperties": true
         }
       }
+    },
+    "MessageKind": {
+      "type": "string",
+      "enum": [
+        "TEXT",
+        "COMMIT_REF",
+        "WIP_REF",
+        "FILE_REF",
+        "CODE_COMMENT_REF",
+        "SYSTEM",
+        "DOC_REF",
+        "PDF_REF"
+      ]
     }
   }
 }

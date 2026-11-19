@@ -11,6 +11,7 @@ const domains = {
   IdentitySpace: "identity-space",
   Chat: "chat",
   GitProjectCli: "gitproject-cli",
+  P3DocsRemoteAi: "p3-docs-remote-ai",
   P2FilesDiff: "p2-files-diff",
 };
 const index = [];

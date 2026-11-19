@@ -1,0 +1,17 @@
+{
+  "name": "@orbitspace/collab-hocuspocus",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@hocuspocus/server": "4.8.0",
+    "@orbitspace/shared-types": "workspace:*",
+    "ioredis": "6.0.0",
+    "y-protocols": "catalog:",
+    "yjs": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3"
+  }
+}

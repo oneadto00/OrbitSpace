@@ -1,0 +1,1569 @@
+openapi: 3.1.1
+info:
+  title: OrbitSpace P3 documents, remote Git and AI
+  version: 3.0.0
+  description: All public operations recheck space, resource ownership, current membership epoch, role and
+    retention. Mutations require edit permission unless explicitly available to readers. Idempotent replays
+    reauthorize and reject changed payloads. Internal HMAC callbacks use fresh nonces per attempt.
+security:
+  - AccessToken: []
+paths:
+  /api/v1/spaces/{spaceId}/documents:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    post:
+      operationId: createDocument
+      description: Requires a current member with edit permission.
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentInfo"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - title
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+    get:
+      operationId: listDocuments
+      description: List active documents visible to the caller.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DocumentInfo"
+                minItems: 0
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+  /api/v1/spaces/{spaceId}/documents/{documentId}:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    delete:
+      operationId: deleteDocument
+      description: Fence the document lifecycle, invalidate tickets, disconnect sessions and hide derived previews.
+      responses:
+        "204":
+          description: Completed
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+  /api/v1/spaces/{spaceId}/documents/{documentId}/collab-ticket:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    post:
+      operationId: issueDocumentTicket
+      description: Readers including VIEWER may request a short-lived single-use ticket scoped to the caller,
+        document, session and epoch. Send it in the provider authentication frame. A retry cannot rearm a
+        consumed ticket.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentTicket"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+  /api/v1/spaces/{spaceId}/documents/{documentId}/saved-boundary:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    get:
+      operationId: getDocumentSavedBoundary
+      description: Only committed update batches advance this sequence. Transport synchronization does not
+        acknowledge durable storage.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentSavedBoundary"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+  /api/v1/spaces/{spaceId}/documents/{documentId}/versions:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    get:
+      operationId: listDocumentVersions
+      description: List immutable versions newest first, using a stable continuation cursor.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentVersionPage"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            $ref: ./common.yaml#/components/schemas/Id
+          required: false
+    post:
+      operationId: createDocumentVersion
+      description: Save a manual version of the expected durable boundary. Refuse a stale boundary.
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentVersion"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - expectedPersistedBatchSeq
+              properties:
+                expectedPersistedBatchSeq:
+                  $ref: ./common.yaml#/components/schemas/Sequence
+  /api/v1/spaces/{spaceId}/documents/{documentId}/versions/{versionId}:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: versionId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    get:
+      operationId: readDocumentVersion
+      description: Read the immutable Yjs V1 state subject to live authorization and retention.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentVersionContent"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+  /api/v1/spaces/{spaceId}/documents/{documentId}/quote-versions:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    post:
+      operationId: freezeDocumentQuote
+      description: Resolve the selection and verify its quoted text at the requested durable sequence. Verify any
+        supplied batch ID belongs to that boundary and document. Reuse or create an immutable version. Return
+        DOC_ANCHOR_UNPERSISTED if the selected update has no durable evidence.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocQuoteAnchor"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - persistedBatchSeq
+                - selection
+              properties:
+                persistedBatchSeq:
+                  $ref: ./common.yaml#/components/schemas/Sequence
+                batchId:
+                  $ref: ./common.yaml#/components/schemas/Id
+                selection:
+                  $ref: "#/components/schemas/DocumentSelection"
+  /api/v1/spaces/{spaceId}/documents/{documentId}/versions/{versionId}/restore-preview:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: versionId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    post:
+      operationId: previewDocumentRestore
+      description: Coordinate an editor flush. Show the diff from the current durable state and bind the preview to
+        this user, target and base boundary.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentRestorePreview"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+  /api/v1/spaces/{spaceId}/documents/{documentId}/versions/{versionId}/restore:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: versionId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    post:
+      operationId: applyDocumentRestore
+      description: Fence room writes and flush pending edits. Reject expired previews or a changed base. Persist a
+        backup before applying a coordinated new edit. Resume safely by idempotency key and acknowledge only
+        after the resulting version is durable.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentRestoreResult"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - previewId
+                - expectedPersistedBatchSeq
+                - confirmed
+              properties:
+                previewId:
+                  $ref: ./common.yaml#/components/schemas/Id
+                expectedPersistedBatchSeq:
+                  $ref: ./common.yaml#/components/schemas/Sequence
+                confirmed:
+                  const: true
+  /api/v1/spaces/{spaceId}/documents/{documentId}/markdown:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    post:
+      operationId: importDocumentMarkdown
+      description: Convert Markdown to a new editor transaction. Conversion may change unsupported formatting.
+        Acknowledge after persistence.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentSavedBoundary"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - markdown
+                - expectedPersistedBatchSeq
+              properties:
+                markdown:
+                  type: string
+                  minLength: 1
+                  maxLength: 4194304
+                expectedPersistedBatchSeq:
+                  $ref: ./common.yaml#/components/schemas/Sequence
+  /api/v1/spaces/{spaceId}/documents/{documentId}/versions/{versionId}/markdown:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: versionId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    get:
+      operationId: exportDocumentMarkdown
+      description: Export this saved version. Arbitrary Markdown and rich text may lose formatting in a round trip.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - markdown
+                  - persistedVersionId
+                properties:
+                  markdown:
+                    type: string
+                  persistedVersionId:
+                    $ref: ./common.yaml#/components/schemas/Id
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+  /api/v1/spaces/{spaceId}/documents/{documentId}/comments:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    post:
+      operationId: createDocumentComment
+      description: Resolve the submitted selection against the named immutable version. Link the comment to one
+        shared discussion.
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentComment"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - persistedVersionId
+                - selection
+                - body
+              properties:
+                persistedVersionId:
+                  $ref: ./common.yaml#/components/schemas/Id
+                selection:
+                  $ref: "#/components/schemas/DocumentSelection"
+                body:
+                  type: string
+                  minLength: 1
+                  maxLength: 8000
+  /api/v1/spaces/{spaceId}/documents/{documentId}/comments/{commentId}:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: commentId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    get:
+      operationId: locateDocumentQuote
+      description: CURRENT resolves relative positions in the live document and reports changed or invalid anchors.
+        QUOTED_VERSION resolves against the immutable persistedVersionId. Reauthorize each entry.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentComment"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - name: view
+          in: query
+          schema:
+            type: string
+            enum:
+              - CURRENT
+              - QUOTED_VERSION
+          required: true
+  /api/v1/spaces/{spaceId}/files/{fileId}/versions/{fileVersionId}/pdf-comments:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: fileVersionId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    post:
+      operationId: createPdfComment
+      description: Validate the authorized immutable PDF, 1-based page and normalized selection against the page.
+        Create a discussion without changing the PDF.
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PdfComment"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - anchor
+                - body
+              properties:
+                anchor:
+                  $ref: "#/components/schemas/PdfQuoteAnchor"
+                body:
+                  type: string
+                  minLength: 1
+                  maxLength: 8000
+  /api/v1/spaces/{spaceId}/files/{fileId}/versions/{fileVersionId}/pdf-comments/{commentId}:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: fileVersionId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: commentId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    get:
+      operationId: locatePdfQuote
+      description: Return the original authorized file version, page, selection and quote after checking the file grant.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PdfComment"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+  /api/v1/spaces/{spaceId}/documents/{documentId}/comments/{commentId}/forward-chat:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: commentId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    post:
+      operationId: forwardDocumentComment
+      description: Reauthorize the immutable source and create a DOC_REF entry in the space main room linked to the
+        existing discussion. Return its committed message receipt.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: ../ws/chat-events.schema.json#/$defs/MessageAck
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - clientMsgId
+              properties:
+                clientMsgId:
+                  $ref: ./common.yaml#/components/schemas/Id
+                purpose:
+                  type: string
+                  minLength: 1
+                  maxLength: 4000
+  /api/v1/spaces/{spaceId}/files/{fileId}/versions/{fileVersionId}/pdf-comments/{commentId}/forward-chat:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: fileVersionId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: commentId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    post:
+      operationId: forwardPdfComment
+      description: Reauthorize the immutable source and create a PDF_REF entry in the space main room linked to the
+        existing discussion. Return its committed message receipt.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: ../ws/chat-events.schema.json#/$defs/MessageAck
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - clientMsgId
+              properties:
+                clientMsgId:
+                  $ref: ./common.yaml#/components/schemas/Id
+                purpose:
+                  type: string
+                  minLength: 1
+                  maxLength: 4000
+  /api/v1/spaces/{spaceId}/projects/{projectId}/git-sources:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    post:
+      operationId: bindGitSource
+      description: Explicit binding by an OWNER, ADMIN or MEMBER authorized for this project. Normalize and
+        allowlist HTTPS port 443. Return REMOTE_URL_FORBIDDEN for disallowed hosts, transports, ports,
+        userinfo, query or fragment. Persist optional token with authenticated encryption and a separate
+        versioned key. Never echo or log it.
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GitSource"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - httpsUrl
+              properties:
+                httpsUrl:
+                  type: string
+                  format: uri
+                  pattern: ^https://
+                accessToken:
+                  type: string
+                  minLength: 1
+                  maxLength: 4096
+                  writeOnly: true
+    get:
+      operationId: listGitSources
+      description: Return authorized source metadata and credential presence only.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GitSource"
+                minItems: 0
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+  /api/v1/spaces/{spaceId}/projects/{projectId}/git-sources/{sourceId}:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: sourceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    delete:
+      operationId: unbindGitSource
+      description: Revoke the source credential, cancel outstanding syncs and reject late results.
+      responses:
+        "204":
+          description: Completed
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+  /api/v1/spaces/{spaceId}/projects/{projectId}/git-sources/{sourceId}/sync:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: sourceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    post:
+      operationId: syncGitSource
+      description: Recheck project and credential owner grant. Queue bounded Git fetch through the isolated proxy
+        with verified TLS, redirects disabled, no recursive submodules or external filters. A blocked IP
+        terminates the job with SSRF_TARGET_BLOCKED.
+      responses:
+        "202":
+          description: Accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/P3JobReceipt"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+  /api/v1/spaces/{spaceId}/ai/config:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    get:
+      operationId: getSpaceAiConfig
+      description: Read current space policy. AI defaults to disabled.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpaceAiPolicy"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+    put:
+      operationId: configureSpaceAi
+      description: Only OWNER or ADMIN can set enabled state and eligible source kinds.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpaceAiPolicy"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpaceAiPolicy"
+  /api/v1/spaces/{spaceId}/ai/summaries:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    post:
+      operationId: requestAiSummary
+      description: Reject a disabled policy with AI_DISABLED_IN_SPACE and authorize every source version for this
+        actor and epoch. Queue only immutable authorized inputs. Recheck at dispatch and result acceptance.
+      responses:
+        "202":
+          description: Accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/P3JobReceipt"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - sources
+              properties:
+                sources:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/AiSourceRef"
+                  minItems: 1
+                  maxItems: 64
+  /api/v1/spaces/{spaceId}/ai/summaries/{jobId}:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    get:
+      operationId: previewAiSummary
+      description: Only the originating member may read this preview. Recheck current policy, epoch and every source
+        grant before returning points with citations.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiSummaryStatus"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+  /api/v1/spaces/{spaceId}/ai/summaries/{jobId}/commit:
+    parameters:
+      - name: spaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          $ref: ./common.yaml#/components/schemas/Id
+      - $ref: ./common.yaml#/components/parameters/MemberEpoch
+    post:
+      operationId: commitAiSummary
+      description: Bind explicit confirmation to the exact previewed result and document boundary. Recheck actor,
+        sources, policy and destination edit access. Apply once as a new document edit.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentSavedBoundary"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - resultVersionId
+                - documentId
+                - expectedPersistedBatchSeq
+                - confirmed
+              properties:
+                resultVersionId:
+                  $ref: ./common.yaml#/components/schemas/Id
+                documentId:
+                  $ref: ./common.yaml#/components/schemas/Id
+                expectedPersistedBatchSeq:
+                  $ref: ./common.yaml#/components/schemas/Sequence
+                confirmed:
+                  const: true
+  /internal/v1/collab/authenticate:
+    post:
+      operationId: authenticateCollab
+      description: Atomically consume the bound ticket. Check live membership, role and document. VIEWER sessions
+        are read-only.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollabSession"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      security:
+        - InternalHmacAuth: []
+      parameters:
+        - $ref: ./p2-files-diff.yaml#/components/parameters/InternalTimestamp
+        - $ref: ./p2-files-diff.yaml#/components/parameters/InternalNonce
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollabAuthenticate"
+  /internal/v1/collab/load:
+    post:
+      operationId: loadCollabState
+      description: Reauthorize the session. First page includes the latest available snapshot. Return contiguous
+        subsequent batches through a fixed high-water mark. Cursor pins this boundary across pages.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollabStatePage"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      security:
+        - InternalHmacAuth: []
+      parameters:
+        - $ref: ./p2-files-diff.yaml#/components/parameters/InternalTimestamp
+        - $ref: ./p2-files-diff.yaml#/components/parameters/InternalNonce
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollabLoad"
+  /internal/v1/collab/store-batch:
+    post:
+      operationId: storeCollabBatch
+      description: Accept document updates from one live editing session. Verify the immutable update object before
+        transactionally checking epoch, lifecycle and expected sequence and advancing the pointer. Replay an
+        identical batchId after authorization and reject different bytes. Acknowledge after commit.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollabBatchReceipt"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      security:
+        - InternalHmacAuth: []
+      parameters:
+        - $ref: ./p2-files-diff.yaml#/components/parameters/InternalTimestamp
+        - $ref: ./p2-files-diff.yaml#/components/parameters/InternalNonce
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollabStoreBatch"
+  /internal/v1/collab/revoke-check:
+    post:
+      operationId: checkCollabAccess
+      description: Recheck current membership, epoch, role and lifecycle. On COLLAB_REVOKED disconnect immediately.
+        Fail closed on callback failure.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollabAccess"
+        default:
+          $ref: ./common.yaml#/components/responses/Error
+      security:
+        - InternalHmacAuth: []
+      parameters:
+        - $ref: ./p2-files-diff.yaml#/components/parameters/InternalTimestamp
+        - $ref: ./p2-files-diff.yaml#/components/parameters/InternalNonce
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollabRevokeCheck"
+components:
+  securitySchemes:
+    AccessToken:
+      $ref: ./common.yaml#/components/securitySchemes/AccessToken
+    InternalHmacAuth:
+      $ref: ./p2-files-diff.yaml#/components/securitySchemes/InternalHmacAuth
+  schemas:
+    CollabAuthenticate:
+      $ref: ../ws/collab-hooks.schema.json#/$defs/CollabAuthenticate
+    CollabSession:
+      $ref: ../ws/collab-hooks.schema.json#/$defs/CollabSession
+    CollabLoad:
+      $ref: ../ws/collab-hooks.schema.json#/$defs/CollabLoad
+    CollabUpdate:
+      $ref: ../ws/collab-hooks.schema.json#/$defs/CollabUpdate
+    CollabStatePage:
+      $ref: ../ws/collab-hooks.schema.json#/$defs/CollabStatePage
+    CollabStoreBatch:
+      $ref: ../ws/collab-hooks.schema.json#/$defs/CollabStoreBatch
+    CollabBatchReceipt:
+      $ref: ../ws/collab-hooks.schema.json#/$defs/CollabBatchReceipt
+    CollabRevokeCheck:
+      $ref: ../ws/collab-hooks.schema.json#/$defs/CollabRevokeCheck
+    CollabAccess:
+      $ref: ../ws/collab-hooks.schema.json#/$defs/CollabAccess
+    DocumentInfo:
+      type: object
+      additionalProperties: false
+      required:
+        - documentId
+        - spaceId
+        - title
+        - persistedBatchSeq
+      properties:
+        documentId:
+          $ref: ./common.yaml#/components/schemas/Id
+        spaceId:
+          $ref: ./common.yaml#/components/schemas/Id
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        persistedBatchSeq:
+          $ref: ./common.yaml#/components/schemas/Sequence
+    DocumentTicket:
+      type: object
+      additionalProperties: false
+      required:
+        - ticket
+        - documentId
+        - membershipEpoch
+        - expiresAt
+        - wsPath
+      properties:
+        ticket:
+          type: string
+          minLength: 1
+          maxLength: 512
+        documentId:
+          $ref: ./common.yaml#/components/schemas/Id
+        membershipEpoch:
+          $ref: ./common.yaml#/components/schemas/PositiveSequence
+        expiresAt:
+          $ref: ./common.yaml#/components/schemas/Timestamp
+        wsPath:
+          const: /collab
+    DocumentSavedBoundary:
+      type: object
+      additionalProperties: false
+      required:
+        - documentId
+        - persistedBatchSeq
+      properties:
+        documentId:
+          $ref: ./common.yaml#/components/schemas/Id
+        persistedBatchSeq:
+          $ref: ./common.yaml#/components/schemas/Sequence
+    DocumentVersion:
+      type: object
+      additionalProperties: false
+      required:
+        - documentId
+        - persistedVersionId
+        - persistedBatchSeq
+        - kind
+        - createdAt
+      properties:
+        documentId:
+          $ref: ./common.yaml#/components/schemas/Id
+        persistedVersionId:
+          $ref: ./common.yaml#/components/schemas/Id
+        persistedBatchSeq:
+          $ref: ./common.yaml#/components/schemas/Sequence
+        kind:
+          type: string
+          enum:
+            - MANUAL
+            - AUTO
+            - QUOTE
+            - RESTORE_BACKUP
+            - RESTORE_RESULT
+        createdAt:
+          $ref: ./common.yaml#/components/schemas/Timestamp
+    DocumentVersionContent:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+        - yjsUpdate
+      properties:
+        version:
+          $ref: "#/components/schemas/DocumentVersion"
+        yjsUpdate:
+          type: string
+          contentEncoding: base64
+          format: byte
+          minLength: 4
+          maxLength: 67108864
+          pattern: ^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$
+    DocumentVersionPage:
+      type: object
+      additionalProperties: false
+      required:
+        - versions
+        - nextCursor
+      properties:
+        versions:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentVersion"
+          minItems: 0
+        nextCursor:
+          anyOf:
+            - $ref: ./common.yaml#/components/schemas/Id
+            - type: "null"
+    DocumentRestorePreview:
+      type: object
+      additionalProperties: false
+      required:
+        - previewId
+        - targetVersionId
+        - basePersistedBatchSeq
+        - diff
+        - expiresAt
+      properties:
+        previewId:
+          $ref: ./common.yaml#/components/schemas/Id
+        targetVersionId:
+          $ref: ./common.yaml#/components/schemas/Id
+        basePersistedBatchSeq:
+          $ref: ./common.yaml#/components/schemas/Sequence
+        diff:
+          type: string
+          minLength: 1
+          maxLength: 4194304
+        expiresAt:
+          $ref: ./common.yaml#/components/schemas/Timestamp
+    DocumentRestoreResult:
+      type: object
+      additionalProperties: false
+      required:
+        - backup
+        - newVersion
+      properties:
+        backup:
+          $ref: "#/components/schemas/DocumentVersion"
+        newVersion:
+          $ref: "#/components/schemas/DocumentVersion"
+    YRelativePosition:
+      type: string
+      contentEncoding: base64
+      format: byte
+      minLength: 4
+      maxLength: 1024
+      pattern: ^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$
+      description: Base64 encoding of Y.encodeRelativePosition.
+    DocumentSelection:
+      type: object
+      additionalProperties: false
+      required:
+        - relativeStart
+        - relativeEnd
+        - quotedText
+      properties:
+        relativeStart:
+          $ref: "#/components/schemas/YRelativePosition"
+        relativeEnd:
+          $ref: "#/components/schemas/YRelativePosition"
+        quotedText:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        contextBefore:
+          type: string
+          minLength: 1
+          maxLength: 512
+        contextAfter:
+          type: string
+          minLength: 1
+          maxLength: 512
+    DocQuoteAnchor:
+      type: object
+      additionalProperties: false
+      required:
+        - documentId
+        - persistedVersionId
+        - anchorStatus
+        - relativeStart
+        - relativeEnd
+        - quotedText
+      properties:
+        documentId:
+          $ref: ./common.yaml#/components/schemas/Id
+        persistedVersionId:
+          $ref: ./common.yaml#/components/schemas/Id
+        anchorStatus:
+          type: string
+          enum:
+            - ACTIVE
+            - CONTENT_MODIFIED
+            - ANCHOR_INVALID
+        relativeStart:
+          $ref: "#/components/schemas/YRelativePosition"
+        relativeEnd:
+          $ref: "#/components/schemas/YRelativePosition"
+        quotedText:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        contextBefore:
+          type: string
+          minLength: 1
+          maxLength: 512
+        contextAfter:
+          type: string
+          minLength: 1
+          maxLength: 512
+    PdfSelectionRect:
+      type: object
+      additionalProperties: false
+      required:
+        - left
+        - top
+        - right
+        - bottom
+      properties:
+        left:
+          type: number
+          minimum: 0
+          maximum: 1
+        top:
+          type: number
+          minimum: 0
+          maximum: 1
+        right:
+          type: number
+          minimum: 0
+          maximum: 1
+        bottom:
+          type: number
+          minimum: 0
+          maximum: 1
+      description: Fractions of the unrotated page crop box, with top-left origin. Require left < right and top < bottom.
+    PdfQuoteAnchor:
+      type: object
+      additionalProperties: false
+      required:
+        - fileId
+        - fileVersionId
+        - pageNumber
+        - rectangles
+        - quotedText
+      properties:
+        fileId:
+          $ref: ./common.yaml#/components/schemas/Id
+        fileVersionId:
+          $ref: ./common.yaml#/components/schemas/Id
+        pageNumber:
+          $ref: ./common.yaml#/components/schemas/PositiveSequence
+        rectangles:
+          type: array
+          items:
+            $ref: "#/components/schemas/PdfSelectionRect"
+          minItems: 1
+          maxItems: 128
+        quotedText:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        contextBefore:
+          type: string
+          minLength: 1
+          maxLength: 512
+        contextAfter:
+          type: string
+          minLength: 1
+          maxLength: 512
+    DocumentComment:
+      type: object
+      additionalProperties: false
+      required:
+        - commentId
+        - discussionThreadId
+        - anchor
+        - body
+      properties:
+        commentId:
+          $ref: ./common.yaml#/components/schemas/Id
+        discussionThreadId:
+          $ref: ./common.yaml#/components/schemas/Id
+        anchor:
+          $ref: "#/components/schemas/DocQuoteAnchor"
+        body:
+          type: string
+          minLength: 1
+          maxLength: 8000
+    PdfComment:
+      type: object
+      additionalProperties: false
+      required:
+        - commentId
+        - discussionThreadId
+        - anchor
+        - body
+      properties:
+        commentId:
+          $ref: ./common.yaml#/components/schemas/Id
+        discussionThreadId:
+          $ref: ./common.yaml#/components/schemas/Id
+        anchor:
+          $ref: "#/components/schemas/PdfQuoteAnchor"
+        body:
+          type: string
+          minLength: 1
+          maxLength: 8000
+    GitSource:
+      type: object
+      additionalProperties: false
+      required:
+        - sourceId
+        - spaceId
+        - projectId
+        - httpsUrl
+        - credentialConfigured
+      properties:
+        sourceId:
+          $ref: ./common.yaml#/components/schemas/Id
+        spaceId:
+          $ref: ./common.yaml#/components/schemas/Id
+        projectId:
+          $ref: ./common.yaml#/components/schemas/Id
+        httpsUrl:
+          type: string
+          format: uri
+        credentialConfigured:
+          type: boolean
+    P3JobReceipt:
+      type: object
+      additionalProperties: false
+      required:
+        - jobId
+      properties:
+        jobId:
+          $ref: ./common.yaml#/components/schemas/Id
+    AiSourceKind:
+      type: string
+      enum:
+        - DOCUMENT_VERSION
+        - PDF_VERSION
+        - GIT_SNAPSHOT
+        - CHAT_MESSAGE
+    AiSourceRef:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - resourceId
+        - versionId
+      properties:
+        kind:
+          $ref: "#/components/schemas/AiSourceKind"
+        resourceId:
+          $ref: ./common.yaml#/components/schemas/Id
+        versionId:
+          $ref: ./common.yaml#/components/schemas/Id
+    SpaceAiPolicy:
+      type: object
+      additionalProperties: false
+      required:
+        - enabled
+        - allowedKinds
+      properties:
+        enabled:
+          type: boolean
+        allowedKinds:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiSourceKind"
+          minItems: 0
+          uniqueItems: true
+    AiSummaryPoint:
+      type: object
+      additionalProperties: false
+      required:
+        - text
+        - sources
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 8192
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiSourceRef"
+          minItems: 1
+          maxItems: 64
+    AiSummaryStatus:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - jobId
+            - status
+          properties:
+            jobId:
+              $ref: ./common.yaml#/components/schemas/Id
+            status:
+              type: string
+              enum:
+                - PENDING
+                - RUNNING
+                - RETRY_WAIT
+        - type: object
+          additionalProperties: false
+          required:
+            - jobId
+            - status
+            - reason
+          properties:
+            jobId:
+              $ref: ./common.yaml#/components/schemas/Id
+            status:
+              type: string
+              enum:
+                - FAILED
+                - CANCELLED
+            reason:
+              type: string
+              minLength: 1
+              maxLength: 256
+        - type: object
+          additionalProperties: false
+          required:
+            - jobId
+            - status
+            - resultVersionId
+            - points
+          properties:
+            jobId:
+              $ref: ./common.yaml#/components/schemas/Id
+            status:
+              const: SUCCEEDED
+            resultVersionId:
+              $ref: ./common.yaml#/components/schemas/Id
+            points:
+              type: array
+              items:
+                $ref: "#/components/schemas/AiSummaryPoint"
+              minItems: 1
+              maxItems: 256

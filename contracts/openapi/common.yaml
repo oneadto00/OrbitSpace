@@ -23,6 +23,7 @@ components:
     P1MessageKind: {$ref: ../common.schema.json#/$defs/P1MessageKind}
     GrantType: {$ref: ../common.schema.json#/$defs/GrantType}
     P2MessageKind: {$ref: ../common.schema.json#/$defs/P2MessageKind}
+    MessageKind: {$ref: ../common.schema.json#/$defs/MessageKind}
     DeviceScope: {$ref: ../common.schema.json#/$defs/DeviceScope}
     CardState: {$ref: ../common.schema.json#/$defs/CardState}
     ApiError: {$ref: ../common.schema.json#/$defs/ApiError}

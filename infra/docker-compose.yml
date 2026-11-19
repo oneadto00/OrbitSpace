@@ -24,6 +24,7 @@ services:
       retries: 30
 
   redis:
+    networks: [default, git_fetch_isolated]
     image: redis:7.4
     command: ["redis-server", "--appendonly", "yes"]
     ports:
@@ -37,6 +38,7 @@ services:
       retries: 20
 
   minio:
+    networks: [default, git_fetch_isolated]
     build:
       context: ./minio
       target: server
@@ -84,7 +86,8 @@ services:
       - local-tls:/etc/nginx/local-tls
 
   server:
-    profiles: [fullstack, p2]
+    networks: [default, git_fetch_isolated]
+    profiles: [fullstack, p2, p3]
     build: ../apps/server
     depends_on:
       mysql:
@@ -96,6 +99,7 @@ services:
       mailpit:
         condition: service_started
     environment:
+      ORBIT_GIT_TRUSTED_HOSTS: &git-hosts ${ORBIT_GIT_TRUSTED_HOSTS:-github.com,gitlab.com,bitbucket.org}
       SERVER_PORT: 8080
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/orbitspace
       SPRING_DATASOURCE_USERNAME: orbitspace
@@ -111,13 +115,13 @@ services:
       ORBIT_INTERNAL_HMAC_SECRET: ${ORBIT_INTERNAL_HMAC_SECRET:-local-only-internal-hmac-secret}
 
   web:
-    profiles: [fullstack, p2]
+    profiles: [fullstack, p2, p3]
     build:
       context: ..
       dockerfile: apps/web/Dockerfile
 
   worker-py:
-    profiles: [p2]
+    profiles: [p2, p3]
     build: ../services/worker-py
     depends_on:
       server:
@@ -126,9 +130,17 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    networks: [git_fetch_isolated]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     environment:
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: server,redis,minio
+      GIT_CONFIG_COUNT: "2"
+      GIT_CONFIG_KEY_0: http.sslVerify
+      GIT_CONFIG_VALUE_0: "true"
+      GIT_CONFIG_KEY_1: http.followRedirects
+      GIT_CONFIG_VALUE_1: "false"
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       ORBIT_REDIS_HOST: redis
@@ -151,6 +163,41 @@ services:
         limits:
           cpus: "1.0"
           memory: 512M
+
+  collab-hocuspocus:
+    profiles: [p3]
+    # Step 12 supplies the authenticated service and its Dockerfile.
+    build:
+      context: ..
+      dockerfile: services/collab-hocuspocus/Dockerfile
+    depends_on:
+      server:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: 1234
+      ORBIT_PUBLIC_ORIGIN: https://localhost:8443
+      ORBIT_SERVER_INTERNAL_URL: http://server:8080
+      ORBIT_INTERNAL_HMAC_SECRET: ${ORBIT_INTERNAL_HMAC_SECRET:-local-only-internal-hmac-secret}
+      ORBIT_REDIS_HOST: redis
+
+  egress-proxy:
+    profiles: [p3]
+    build: ./egress-proxy
+    networks: [git_fetch_isolated, git_egress]
+    environment:
+      ORBIT_GIT_TRUSTED_HOSTS: *git-hosts
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 96m
+    pids_limit: 64
+
+networks:
+  git_fetch_isolated:
+    internal: true
+  git_egress: {}
 
 volumes:
   mysql-data:
