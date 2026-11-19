@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import signal
 import time
@@ -10,6 +11,7 @@ import redis
 
 from orbit_worker.callback_client import CallbackError, ClaimedJob, InternalCallbackClient
 from orbit_worker.config import WorkerConfig
+from orbit_worker import isolation
 from orbit_worker.diff_enrichment import enrich_diff_payload
 from orbit_worker.storage_client import InputLimitExceeded, ObjectStorageReader
 from orbit_worker.thumbnail_processor import ThumbnailProcessingError, generate_safe_thumbnail
@@ -145,7 +147,7 @@ class StreamWorkerLoop:
             claimed.job_type,
         )
 
-        if claimed.job_type not in {JOB_IMAGE_THUMBNAIL, JOB_DIFF_ENRICHMENT}:
+        if claimed.job_type not in {JOB_IMAGE_THUMBNAIL, JOB_DIFF_ENRICHMENT} | isolation.KINDS:
             self._safe_report_failure_and_ack(
                 message_id, claimed, retryable=False, failure_code="UNSUPPORTED_JOB_TYPE"
             )
@@ -182,6 +184,8 @@ class StreamWorkerLoop:
             self._safe_report_failure_and_ack(
                 message_id, claimed, retryable=False, failure_code="INPUT_TOO_LARGE"
             )
+        except ValueError:
+            self._safe_report_failure_and_ack(message_id, claimed, retryable=False, failure_code="INPUT_OR_RESOURCE_REJECTED")
         except FutureTimeoutError:
             LOG.warning(
                 "Task timed out jobId=%s resourceId=%s",
@@ -204,7 +208,7 @@ class StreamWorkerLoop:
                 exc.status_code,
             )
             if exc.status_code in {400, 403, 404, 410}:
-                self._ack(message_id)
+                self._safe_report_failure_and_ack(message_id, claimed, retryable=False, failure_code="JOB_ACCESS_REJECTED")
         except Exception as exc:
             LOG.warning(
                 "Transient processing failure jobId=%s resourceId=%s error=%s",
@@ -221,6 +225,15 @@ class StreamWorkerLoop:
             )
 
     def _process_with_timeout(self, claimed: ClaimedJob) -> bytes:
+        if claimed.job_type in isolation.KINDS:
+            manifest = self._callbacks.authorized_input(claimed)
+            if claimed.job_type == "PDF_INDEX":
+                raw = self._storage.read_bounded(manifest["objectKey"])
+            else:
+                raw = json.dumps(manifest,ensure_ascii=False).encode()
+                manifest.clear()
+            return isolation.execute(claimed.job_type,raw,self._config,
+                                     lambda: self._callbacks.authorized_input(claimed, check_only=True))
         future = self._executor.submit(self._execute_job, claimed)
         try:
             return future.result(timeout=self._config.task_timeout_seconds)

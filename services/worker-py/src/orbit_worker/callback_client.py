@@ -105,6 +105,11 @@ class InternalCallbackClient:
             lease_until=data.get("leaseUntil"),
         )
 
+    def authorized_input(self, claimed: ClaimedJob, check_only=False) -> Dict[str, Any]:
+        path = "/internal/v1/jobs/{}/input".format(claimed.job_id)
+        body = json.dumps({"leaseId":claimed.lease_id,"checkOnly":check_only}).encode()
+        return self._post(path,body,"application/json")
+
     def upload_output(self, job_id: str, output_bytes: bytes) -> StoredOutput:
         path = "/internal/v1/jobs/{}/output".format(job_id)
         sha256_hex = hashlib.sha256(output_bytes).hexdigest()
