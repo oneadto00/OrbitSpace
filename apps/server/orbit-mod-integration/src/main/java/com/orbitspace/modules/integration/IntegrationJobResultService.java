@@ -60,6 +60,7 @@ public class IntegrationJobResultService {
 
     private final JdbcTemplate db;
     private final AsyncJobPort asyncJobs;
+    private final IntegrationEgressService egress;
     private final ObjectStoragePort objectStorage;
     private final AuditLogPort auditLog;
     private final ObjectProvider<S3Client> contentClientProvider;
@@ -71,11 +72,13 @@ public class IntegrationJobResultService {
             JdbcTemplate db,
             AsyncJobPort asyncJobs,
             ObjectStoragePort objectStorage,
+            IntegrationEgressService egress,
             AuditLogPort auditLog,
             @Qualifier("contentClient") ObjectProvider<S3Client> contentClientProvider,
             ObjectProvider<AsyncJobProcessor> processors,
             @Value("${orbit.s3.bucket:orbitspace-private}") String s3Bucket,
             @Value("${orbit.integration.max-output-bytes:16777216}") long maxOutputBytes) {
+        this.egress = egress;
         this.db = db;
         this.asyncJobs = asyncJobs;
         this.objectStorage = objectStorage;
@@ -257,6 +260,7 @@ public class IntegrationJobResultService {
     }
 
     private AsyncJobPort.ResultTarget buildResultTarget(String jobType) {
+        if (egress.handles(jobType)) return egress.target(jobType);
         if (JOB_IMAGE_THUMBNAIL.equals(jobType)) {
             return new ThumbnailResultTarget();
         }
