@@ -1,19 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type { SpaceDetail, SpaceSummary } from "@orbitspace/shared-types";
+import type {
+  CodeCommentDto,
+  CodeCommentListResponse,
+  GrantType,
+  SpaceDetail,
+  SpaceSummary,
+} from "@orbitspace/shared-types";
 import {
   AlertCircle,
   ArrowLeft,
   Check,
+  CheckCircle2,
   Copy,
   FolderGit2,
+  FolderOpen,
   FolderPlus,
   LogOut,
   Orbit,
   Plus,
+  Send,
   Settings,
   ShieldCheck,
   Terminal,
+  Users,
   X,
 } from "lucide-react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -29,7 +39,11 @@ import { logout } from "../shared/api/httpClient";
 import { canManageSpace, canUploadOrManage, useAuth } from "../shared/auth/session";
 import { Brand, Button, Field, Loading, ResourceStateCard } from "../shared/ui/UiComponents";
 import { ChatPane, type ChatDraftQuote } from "../features/chat/ChatPane";
-import { GitWorkspaceView } from "../features/git-canvas/GitWorkspaceView";
+import { SpaceFilesPanel } from "../features/files/SpaceFilesPanel";
+import {
+  GitWorkspaceView,
+  type CommentFocusTarget,
+} from "../features/git-canvas/GitWorkspaceView";
 import { SpaceSettingsPanel } from "../features/space/SpaceSettingsPanel";
 import {
   buildCliQuickstart,
@@ -52,6 +66,7 @@ export function SpaceWorkbenchPage() {
   const queryProjectId = searchParams.get("projectId")?.trim() || null;
   const querySnapshotId = searchParams.get("snapshotId")?.trim() || null;
   const queryCommitOid = searchParams.get("commitOid")?.trim() || null;
+  const queryTab = searchParams.get("tab")?.trim() || null;
 
   const spacesQuery = useQuery({
     queryKey: spacesKey,
@@ -72,13 +87,22 @@ export function SpaceWorkbenchPage() {
     Boolean(accessIdentity && revokedAccessKey === accessIdentity) ||
     Boolean(access && spaceSignal(access).aborted);
 
+  const [centerMode, setCenterMode] = useState<"git" | "files">(
+    queryTab === "files" ? "files" : "git",
+  );
+  const [highlightedFileId, setHighlightedFileId] = useState<string | null>(null);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(queryProjectId);
   const [focusTarget, setFocusTarget] = useState<{
     kind: "COMMIT" | "WIP";
     id: string;
     highlightNonce: number;
   } | undefined>(undefined);
+  const [commentFocusTarget, setCommentFocusTarget] = useState<
+    CommentFocusTarget | undefined
+  >(undefined);
   const [draftQuote, setDraftQuote] = useState<ChatDraftQuote | null>(null);
+  const [chatSyncNonce, setChatSyncNonce] = useState(0);
+  const [forwardNotice, setForwardNotice] = useState<string | null>(null);
 
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
@@ -89,6 +113,7 @@ export function SpaceWorkbenchPage() {
   const appliedDeepLinkRef = useRef<string | null>(null);
   const lastNonceRef = useRef(0);
   const settingsDialogRef = useRef<HTMLDialogElement>(null);
+  const forwardNoticeTimerRef = useRef<number | null>(null);
 
   const nextNonce = useCallback(() => {
     const next = Math.max(Date.now(), lastNonceRef.current + 1);
@@ -98,13 +123,26 @@ export function SpaceWorkbenchPage() {
 
   // Reset per-space / per-epoch UI state
   useEffect(() => {
+    setCenterMode(queryTab === "files" ? "files" : "git");
+    setHighlightedFileId(null);
     setDraftQuote(null);
     setShowCreateProject(false);
     setNewProjectName("");
     setShowSettingsDrawer(false);
     setFocusTarget(undefined);
+    setCommentFocusTarget(undefined);
+    setForwardNotice(null);
     appliedDeepLinkRef.current = null;
-  }, [spaceId, access?.membershipEpoch]);
+  }, [spaceId, access?.membershipEpoch, queryTab]);
+
+  // Clear forward toast timer on unmount
+  useEffect(() => {
+    return () => {
+      if (forwardNoticeTimerRef.current !== null) {
+        window.clearTimeout(forwardNoticeTimerRef.current);
+      }
+    };
+  }, []);
 
   // Bind to instant space revocation
   useEffect(() => {
@@ -114,6 +152,8 @@ export function SpaceWorkbenchPage() {
       setShowSettingsDrawer(false);
       setDraftQuote(null);
       setFocusTarget(undefined);
+      setCommentFocusTarget(undefined);
+      setHighlightedFileId(null);
     });
   }, [access?.spaceId, access?.membershipEpoch, isRevoked]);
 
@@ -222,6 +262,7 @@ export function SpaceWorkbenchPage() {
         void queryClient.invalidateQueries({ queryKey: detailKey });
       }
       setActiveProjectId(created.projectId);
+      setCenterMode("git");
     },
   });
 
@@ -248,8 +289,23 @@ export function SpaceWorkbenchPage() {
     [nextNonce],
   );
 
+  const handleQuoteFileToChat = useCallback(
+    (ref: { grantType: GrantType; targetId: string; title: string }) => {
+      setDraftQuote({
+        kind: "FILE_REF",
+        grantType: ref.grantType,
+        targetId: ref.targetId,
+        title: ref.title,
+        nonce: nextNonce(),
+      });
+    },
+    [nextNonce],
+  );
+
   const handleOpenResourceCard = useCallback(
     (target: { kind: "COMMIT" | "WIP"; projectId: string; targetId: string }) => {
+      setCenterMode("git");
+      setCommentFocusTarget(undefined);
       setActiveProjectId(target.projectId);
       setFocusTarget({
         kind: target.kind,
@@ -259,6 +315,58 @@ export function SpaceWorkbenchPage() {
     },
     [nextNonce],
   );
+
+  const handleOpenCodeCommentCard = useCallback(
+    (target: { projectId: string; commentId: string }) => {
+      if (access) {
+        const commentsKey = [
+          ...spaceKey(access),
+          "project",
+          target.projectId,
+          "code-comments",
+        ] as const;
+        const cached = queryClient.getQueryData<CodeCommentListResponse>(commentsKey);
+        if (cached && !cached.items.some((item) => item.commentId === target.commentId)) {
+          // Drop stale cache so GitWorkspaceView loads fresh comments before resolving target line
+          queryClient.removeQueries({ queryKey: commentsKey });
+        }
+      }
+      setCenterMode("git");
+      setFocusTarget(undefined);
+      setActiveProjectId(target.projectId);
+      setCommentFocusTarget({
+        commentId: target.commentId,
+        highlightNonce: nextNonce(),
+      });
+    },
+    [access, nextNonce],
+  );
+
+  const handleOpenFileCard = useCallback(
+    (target: { grantType: GrantType; targetId: string }) => {
+      if (target.grantType === "SPACE_FILE") {
+        setCenterMode("files");
+        setHighlightedFileId(target.targetId);
+      } else {
+        navigate(`/airdrops?shareId=${encodeURIComponent(target.targetId)}`);
+      }
+    },
+    [navigate],
+  );
+
+  const handleForwardCodeComment = useCallback((comment: CodeCommentDto) => {
+    setChatSyncNonce((n) => n + 1);
+    setForwardNotice(
+      `已将代码批注（${comment.filePath}:${comment.lineNumber}）转发至空间主群聊。`,
+    );
+    if (forwardNoticeTimerRef.current !== null) {
+      window.clearTimeout(forwardNoticeTimerRef.current);
+    }
+    forwardNoticeTimerRef.current = window.setTimeout(() => {
+      setForwardNotice(null);
+      forwardNoticeTimerRef.current = null;
+    }, 4500);
+  }, []);
 
   const activeProject = useMemo(
     () => projects.find((p) => p.projectId === activeProjectId) ?? null,
@@ -347,11 +455,21 @@ export function SpaceWorkbenchPage() {
         </div>
 
         <div className="workbench-topbar-actions">
-          {activeProject && (
+          {centerMode === "files" ? (
+            <span className="workbench-active-project-pill">
+              <FolderOpen size={14} /> 空间文件区
+            </span>
+          ) : activeProject ? (
             <span className="workbench-active-project-pill">
               <FolderGit2 size={14} /> {activeProject.name}
             </span>
-          )}
+          ) : null}
+          <Link className="workbench-nav-link" to="/airdrops">
+            <Send size={14} /> 文件空投
+          </Link>
+          <Link className="workbench-nav-link" to="/friends">
+            <Users size={14} /> 好友
+          </Link>
           <Link className="workbench-nav-link" to="/device">
             <Terminal size={14} /> 授权 CLI 设备
           </Link>
@@ -374,6 +492,21 @@ export function SpaceWorkbenchPage() {
         </div>
       </header>
 
+      {forwardNotice && (
+        <div className="workbench-forward-toast" role="status">
+          <span>
+            <CheckCircle2 size={15} /> {forwardNotice}
+          </span>
+          <Button
+            className="icon-button secondary"
+            aria-label="关闭转发提示"
+            onClick={() => setForwardNotice(null)}
+          >
+            <X size={13} />
+          </Button>
+        </div>
+      )}
+
       {spaceDetailQuery.isError && (
         <div className="alert workbench-top-alert" role="alert">
           <AlertCircle size={16} />
@@ -392,8 +525,29 @@ export function SpaceWorkbenchPage() {
       <div className="workbench-3pane">
         {/* Left Pane: Space & Project Navigation */}
         <aside className="workbench-left-rail" aria-label="空间与工程导航">
+          <div className="rail-mode-switcher" role="tablist" aria-label="工作区视图切换">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={centerMode === "git"}
+              className={`rail-mode-btn ${centerMode === "git" ? "active" : ""}`}
+              onClick={() => setCenterMode("git")}
+            >
+              <FolderGit2 size={14} /> Git 工程
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={centerMode === "files"}
+              className={`rail-mode-btn ${centerMode === "files" ? "active" : ""}`}
+              onClick={() => setCenterMode("files")}
+            >
+              <FolderOpen size={14} /> 空间文件区
+            </button>
+          </div>
+
           <div className="rail-section-head">
-            <h2>空间与工程导航</h2>
+            <h2>Git 工程列表</h2>
             {canManage && (
               <Button
                 className="secondary workbench-btn-xs"
@@ -469,14 +623,18 @@ export function SpaceWorkbenchPage() {
           {projects.length > 0 && (
             <ul className="rail-project-list">
               {projects.map((project) => {
-                const isActive = project.projectId === activeProjectId;
+                const isActive =
+                  centerMode === "git" && project.projectId === activeProjectId;
                 return (
                   <li key={project.projectId}>
                     <button
                       type="button"
                       className={`rail-project-btn ${isActive ? "is-active" : ""}`}
                       aria-current={isActive ? "true" : undefined}
-                      onClick={() => setActiveProjectId(project.projectId)}
+                      onClick={() => {
+                        setActiveProjectId(project.projectId);
+                        setCenterMode("git");
+                      }}
                     >
                       <FolderGit2 size={15} />
                       <div className="rail-project-meta">
@@ -519,15 +677,29 @@ export function SpaceWorkbenchPage() {
           </div>
         </aside>
 
-        {/* Center Pane: Git Topology Workspace */}
-        <section className="workbench-center-pane" aria-label="工程代码画布">
-          {activeProjectId ? (
+        {/* Center Pane: Git Topology Workspace or Space Files Area */}
+        <section
+          className="workbench-center-pane"
+          aria-label={centerMode === "files" ? "空间文件区" : "工程代码画布"}
+        >
+          {centerMode === "files" ? (
+            <SpaceFilesPanel
+              spaceId={spaceId}
+              spaceRole={resolvedSpace.role}
+              access={access}
+              currentUserId={currentUserId}
+              highlightedFileId={highlightedFileId}
+              onQuoteFileToChat={handleQuoteFileToChat}
+            />
+          ) : activeProjectId ? (
             <GitWorkspaceView
               spaceId={spaceId}
               projectId={activeProjectId}
               canUploadOrManage={canWrite}
               focusTarget={focusTarget}
+              commentFocusTarget={commentFocusTarget}
               onQuoteToChat={handleQuoteToChat}
+              onForwardCodeComment={handleForwardCodeComment}
             />
           ) : (
             <div className="workbench-center-empty">
@@ -536,7 +708,7 @@ export function SpaceWorkbenchPage() {
               </span>
               <h3>选择或创建 Git 工程以查看代码拓扑</h3>
               <p className="muted">
-                每个空间支持管理多个 Git 工程，右侧始终保留唯一的空间主群聊用于协作讨论。
+                每个空间支持管理多个 Git 工程与空间文件区，右侧始终保留唯一的空间主群聊用于协作讨论。
               </p>
             </div>
           )}
@@ -552,8 +724,12 @@ export function SpaceWorkbenchPage() {
           projects={projects}
           activeProjectId={activeProjectId}
           draftQuote={draftQuote}
+          externalSyncNonce={chatSyncNonce}
           onClearDraftQuote={() => setDraftQuote(null)}
+          onSelectFileQuote={handleQuoteFileToChat}
           onOpenResourceCard={handleOpenResourceCard}
+          onOpenCodeCommentCard={handleOpenCodeCommentCard}
+          onOpenFileCard={handleOpenFileCard}
         />
       </div>
 

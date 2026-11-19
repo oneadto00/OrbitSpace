@@ -77,7 +77,12 @@ function sortMessagesBySeq(map: Map<string, ChatMessage>): ChatMessage[] {
 }
 
 function isCardMessage(msg: ChatMessage): boolean {
-  return msg.content.kind === "COMMIT_REF" || msg.content.kind === "WIP_REF";
+  return (
+    msg.content.kind === "COMMIT_REF" ||
+    msg.content.kind === "WIP_REF" ||
+    msg.content.kind === "FILE_REF" ||
+    msg.content.kind === "CODE_COMMENT_REF"
+  );
 }
 
 function extractCardMessageIds(messages: Iterable<ChatMessage>): string[] {

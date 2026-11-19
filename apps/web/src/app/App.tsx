@@ -4,8 +4,10 @@ import {
   ArrowRight,
   LayoutDashboard,
   LogOut,
+  Send,
   ShieldCheck,
   Terminal,
+  Users,
   X,
 } from "lucide-react";
 import {
@@ -21,6 +23,8 @@ import {
 import { AccountPage } from "../features/auth-device/AccountPage";
 import { AuthPage } from "../features/auth-device/AuthPage";
 import { DevicePage } from "../features/auth-device/DevicePage";
+import { AirdropPage } from "../features/files/AirdropPage";
+import { FriendsPage } from "../features/friends/FriendsPage";
 import { JoinSpacePage } from "../features/space/JoinSpacePage";
 import { SpaceHomePage } from "../features/space/SpaceHomePage";
 import { logout, refreshSession } from "../shared/api/httpClient";
@@ -136,6 +140,14 @@ function Shell() {
             <LayoutDashboard size={18} />
             工作台
           </NavLink>
+          <NavLink to="/airdrops">
+            <Send size={18} />
+            文件空投
+          </NavLink>
+          <NavLink to="/friends">
+            <Users size={18} />
+            好友
+          </NavLink>
           <NavLink to="/device">
             <Terminal size={18} />
             授权 CLI 设备
@@ -227,6 +239,8 @@ export function App({
         <Route element={<Guard />}>
           <Route element={<Shell />}>
             <Route index element={<HomeRoute />} />
+            <Route path="/airdrops" element={<AirdropPage />} />
+            <Route path="/friends" element={<FriendsPage />} />
             <Route path="/join" element={<JoinSpacePage />} />
             <Route path="/account" element={<AccountPage />} />
             <Route path="/device" element={<DevicePage />} />

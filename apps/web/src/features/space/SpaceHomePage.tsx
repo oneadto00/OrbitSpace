@@ -12,7 +12,9 @@ import {
   Orbit,
   Plus,
   RefreshCw,
+  Send,
   Terminal,
+  Users,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { queryClient, spacesKey } from "../../shared/api/access";
@@ -381,11 +383,35 @@ export function SpaceHomePage() {
         <aside className="side-panels">
           <section className="surface">
             <div className="section-head">
+              <h2>文件空投</h2>
+              <Send size={16} />
+            </div>
+            <p className="muted">
+              面向当前有效好友投递单/多文件，支持分片断点续传、下载次数会话计数与随时撤回。
+            </p>
+            <Link className="text-link" to="/airdrops">
+              进入文件空投 <ArrowRight size={15} />
+            </Link>
+          </section>
+          <section className="surface">
+            <div className="section-head">
+              <h2>好友</h2>
+              <Users size={16} />
+            </div>
+            <p className="muted">
+              搜索协作者、处理好友申请并管理独立空投联系人（好友关系绝不授予空间访问权限）。
+            </p>
+            <Link className="text-link" to="/friends">
+              管理好友关系 <ArrowRight size={15} />
+            </Link>
+          </section>
+          <section className="surface">
+            <div className="section-head">
               <h2>最近访问与未读概览</h2>
               <MessageSquare size={16} />
             </div>
             <p className="muted">
-              每个空间拥有唯一的主群聊。进入空间后即可切换工程 Git 拓扑图并与团队协同讨论。
+              每个空间拥有唯一的主群聊与空间文件区。进入空间后即可切换工程 Git 拓扑图、空间文件与协同讨论。
             </p>
           </section>
           <section className="surface">

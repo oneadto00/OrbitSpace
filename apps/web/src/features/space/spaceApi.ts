@@ -38,6 +38,11 @@ const DOMAIN_ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   RESOURCE_EXPIRED_OR_PURGED: "目标资源已过期或已被清理。",
   WS_CURSOR_EXPIRED: "实时同步游标已过期，正在重新拉取授权历史。",
   WS_TICKET_INVALID: "实时聊天连接票据已失效，正在重新建立连接。",
+  QUOTA_EXCEEDED: "存储配额不足，请清理旧文件或联系管理员调整配额后重试。",
+  SHARE_REVOKED: "该空投分享或你的接收权限已被发送者撤销。",
+  DOWNLOAD_LIMIT_EXCEEDED: "已达到该空投为你设置的下载次数上限。",
+  NOT_FRIENDS_FOR_AIRDROP: "只能向当前有效好友发起独立文件空投，请先确认好友关系。",
+  DIFF_DATA_INSUFFICIENT: "两端点共享内容或基础对象不足以计算完整差异，请按提示使用 CLI 补传。",
   INTERNAL_ERROR: "服务处理出现异常，请稍后重试。",
 };
 

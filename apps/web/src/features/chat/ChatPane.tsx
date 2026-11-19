@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import type {
   CardView,
   ChatMessage,
+  GrantType,
   Member,
   ProjectSummary,
   SpaceRole,
@@ -13,11 +14,14 @@ import {
   CheckCircle2,
   CircleDot,
   CornerDownRight,
+  FileCode2,
   Filter,
+  FolderOpen,
   GitCommitHorizontal,
   GitPullRequestDraft,
   History,
   MessageSquare,
+  Paperclip,
   RefreshCw,
   Reply,
   Send,
@@ -30,6 +34,13 @@ import { spaceKey, type SpaceAccess } from "../../shared/api/access";
 import { canManageSpace, canUploadOrManage } from "../../shared/auth/session";
 import { Button, Loading, ResourceStateCard } from "../../shared/ui/UiComponents";
 import {
+  airdropsKey,
+  filesErrorText,
+  formatBytes,
+  listAirdrops,
+  listSpaceFiles,
+} from "../files/filesApi";
+import {
   formatDateTime,
   listSpaceMembers,
   makeIdempotencyKey,
@@ -37,13 +48,21 @@ import {
 import { chatErrorText } from "./chatApi";
 import { useSpaceChat, type WsConnectionStatus } from "./useSpaceChat";
 
-export interface ChatDraftQuote {
-  kind: "COMMIT_REF" | "WIP_REF";
-  projectId: string;
-  targetId: string;
-  title: string;
-  nonce: number;
-}
+export type ChatDraftQuote =
+  | {
+      kind: "COMMIT_REF" | "WIP_REF";
+      projectId: string;
+      targetId: string;
+      title: string;
+      nonce: number;
+    }
+  | {
+      kind: "FILE_REF";
+      grantType: GrantType;
+      targetId: string;
+      title: string;
+      nonce: number;
+    };
 
 export interface ChatPaneProps {
   spaceId: string;
@@ -54,10 +73,24 @@ export interface ChatPaneProps {
   projects: ProjectSummary[];
   activeProjectId: string | null;
   draftQuote: ChatDraftQuote | null;
+  externalSyncNonce?: number;
   onClearDraftQuote: () => void;
+  onSelectFileQuote?: (ref: {
+    grantType: GrantType;
+    targetId: string;
+    title: string;
+  }) => void;
   onOpenResourceCard: (target: {
     kind: "COMMIT" | "WIP";
     projectId: string;
+    targetId: string;
+  }) => void;
+  onOpenCodeCommentCard?: (target: {
+    projectId: string;
+    commentId: string;
+  }) => void;
+  onOpenFileCard?: (target: {
+    grantType: GrantType;
     targetId: string;
   }) => void;
 }
@@ -133,8 +166,12 @@ export function ChatPane({
   projects,
   activeProjectId,
   draftQuote,
+  externalSyncNonce = 0,
   onClearDraftQuote,
+  onSelectFileQuote,
   onOpenResourceCard,
+  onOpenCodeCommentCard,
+  onOpenFileCard,
 }: ChatPaneProps) {
   const canSend = canUploadOrManage(spaceRole);
   const isOwnerOrAdmin = canManageSpace(spaceRole);
@@ -169,10 +206,36 @@ export function ChatPane({
     isRevoked,
   });
 
+  const [showFilePicker, setShowFilePicker] = useState(false);
+  const [filePickerTab, setFilePickerTab] = useState<GrantType>("SPACE_FILE");
+  const [manualAirdropId, setManualAirdropId] = useState("");
+  const [localFileQuote, setLocalFileQuote] = useState<
+    Extract<ChatDraftQuote, { kind: "FILE_REF" }> | null
+  >(null);
+
+  const activeDraftQuote = draftQuote ?? localFileQuote;
+
   const membersQuery = useQuery({
     queryKey: access ? ([...spaceKey(access), "members"] as const) : ["chat-members-none"],
     enabled: Boolean(access) && !isRevoked && !isRevokedInChat,
     queryFn: ({ signal }) => listSpaceMembers(spaceId, access!, signal),
+  });
+
+  const spaceFilesPickerQuery = useQuery({
+    queryKey: access ? ([...spaceKey(access), "files"] as const) : ["chat-files-none"],
+    enabled:
+      showFilePicker &&
+      filePickerTab === "SPACE_FILE" &&
+      Boolean(access) &&
+      !isRevoked &&
+      !isRevokedInChat,
+    queryFn: ({ signal }) => listSpaceFiles(spaceId, access!, signal),
+  });
+
+  const airdropsPickerQuery = useQuery({
+    queryKey: airdropsKey("ALL"),
+    enabled: showFilePicker && filePickerTab === "AIRDROP_SHARE" && !isRevoked && !isRevokedInChat,
+    queryFn: ({ signal }) => listAirdrops("ALL", signal),
   });
 
   const membersById = useMemo(() => {
@@ -238,16 +301,28 @@ export function ChatPane({
     setSelectedConclusionId("");
     setDiscussionError(null);
     setCardActionError(null);
+    setShowFilePicker(false);
+    setManualAirdropId("");
+    setLocalFileQuote(null);
     initialScrolledRef.current = false;
     wasAtBottomRef.current = true;
   }, [spaceId, access?.membershipEpoch]);
 
-  // Focus composer when user quotes a commit/WIP from GitWorkspaceView
+  // Trigger sync when external producer (e.g. GitWorkspaceView forwarding a code comment) notifies
+  const lastExternalSyncNonceRef = useRef(externalSyncNonce);
   useEffect(() => {
-    if (draftQuote) {
+    if (externalSyncNonce > 0 && externalSyncNonce !== lastExternalSyncNonceRef.current) {
+      lastExternalSyncNonceRef.current = externalSyncNonce;
+      void syncNow();
+    }
+  }, [externalSyncNonce, syncNow]);
+
+  // Focus composer when user quotes a commit/WIP/file
+  useEffect(() => {
+    if (activeDraftQuote) {
       composerInputRef.current?.focus();
     }
-  }, [draftQuote]);
+  }, [activeDraftQuote]);
 
   // Auto-scroll to bottom on initial load and new messages when near bottom
   useEffect(() => {
@@ -299,7 +374,9 @@ export function ChatPane({
     const matchingRootIds = new Set<string>();
     for (const msg of messages) {
       if (
-        (msg.content.kind === "COMMIT_REF" || msg.content.kind === "WIP_REF") &&
+        (msg.content.kind === "COMMIT_REF" ||
+          msg.content.kind === "WIP_REF" ||
+          msg.content.kind === "CODE_COMMENT_REF") &&
         msg.content.projectId === activeProjectId
       ) {
         matchingRootIds.add(msg.replyToMsgId ?? msg.messageId);
@@ -329,28 +406,58 @@ export function ChatPane({
     return Boolean(currentUserId && msg.senderId === currentUserId && canSend);
   };
 
+  const applyFileQuote = (ref: { grantType: GrantType; targetId: string; title: string }) => {
+    if (onSelectFileQuote) {
+      setLocalFileQuote(null);
+      onSelectFileQuote(ref);
+    } else {
+      onClearDraftQuote();
+      setLocalFileQuote({
+        kind: "FILE_REF",
+        ...ref,
+        nonce: Date.now(),
+      });
+    }
+    setShowFilePicker(false);
+    setManualAirdropId("");
+    composerInputRef.current?.focus();
+  };
+
+  const clearCurrentQuote = () => {
+    setLocalFileQuote(null);
+    onClearDraftQuote();
+  };
+
   const submitComposer = async () => {
     if (!canSend || isRevoked || isRevokedInChat) return;
 
     const trimmed = composerText.trim();
-    if (!draftQuote && !trimmed) return;
+    if (!activeDraftQuote && !trimmed) return;
 
     let content: Parameters<typeof sendMessage>[0]["content"];
-    if (draftQuote) {
-      content =
-        draftQuote.kind === "COMMIT_REF"
-          ? {
-              kind: "COMMIT_REF",
-              projectId: draftQuote.projectId,
-              commitOid: draftQuote.targetId,
-              ...(trimmed ? { purpose: trimmed } : {}),
-            }
-          : {
-              kind: "WIP_REF",
-              projectId: draftQuote.projectId,
-              snapshotId: draftQuote.targetId,
-              ...(trimmed ? { purpose: trimmed } : {}),
-            };
+    if (activeDraftQuote) {
+      if (activeDraftQuote.kind === "COMMIT_REF") {
+        content = {
+          kind: "COMMIT_REF",
+          projectId: activeDraftQuote.projectId,
+          commitOid: activeDraftQuote.targetId,
+          ...(trimmed ? { purpose: trimmed } : {}),
+        };
+      } else if (activeDraftQuote.kind === "WIP_REF") {
+        content = {
+          kind: "WIP_REF",
+          projectId: activeDraftQuote.projectId,
+          snapshotId: activeDraftQuote.targetId,
+          ...(trimmed ? { purpose: trimmed } : {}),
+        };
+      } else {
+        content = {
+          kind: "FILE_REF",
+          grantType: activeDraftQuote.grantType,
+          targetId: activeDraftQuote.targetId,
+          ...(trimmed ? { purpose: trimmed } : {}),
+        };
+      }
     } else {
       content = {
         kind: "TEXT",
@@ -361,8 +468,9 @@ export function ChatPane({
     const replyId = replyTarget?.messageId;
     setComposerText("");
     setReplyTargetId(null);
-    if (draftQuote) {
-      onClearDraftQuote();
+    setShowFilePicker(false);
+    if (activeDraftQuote) {
+      clearCurrentQuote();
     }
     wasAtBottomRef.current = true;
 
@@ -378,14 +486,25 @@ export function ChatPane({
   };
 
   const handleOpenCard = async (msg: ChatMessage) => {
-    if (msg.content.kind !== "COMMIT_REF" && msg.content.kind !== "WIP_REF") return;
+    if (
+      msg.content.kind !== "COMMIT_REF" &&
+      msg.content.kind !== "WIP_REF" &&
+      msg.content.kind !== "FILE_REF" &&
+      msg.content.kind !== "CODE_COMMENT_REF"
+    ) {
+      return;
+    }
     setCardActionError(null);
     setOpeningCardId(msg.messageId);
     try {
       const freshView = await resolveCardForOpen(msg.messageId);
       if (!freshView) return;
       if (freshView.state !== "AVAILABLE") {
-        setCardActionError("该引用资源当前不可访问、已过期或已被清理，已更新卡片状态。");
+        setCardActionError(
+          freshView.state === "FORBIDDEN"
+            ? "无访问权限：当前账号无权查看该资源卡片（如独立空投仅限指定接收人）。"
+            : "该引用资源当前不可访问、已过期或已被清理，已更新卡片状态。",
+        );
         return;
       }
       if (msg.content.kind === "COMMIT_REF") {
@@ -394,11 +513,21 @@ export function ChatPane({
           projectId: msg.content.projectId,
           targetId: msg.content.commitOid,
         });
-      } else {
+      } else if (msg.content.kind === "WIP_REF") {
         onOpenResourceCard({
           kind: "WIP",
           projectId: msg.content.projectId,
           targetId: msg.content.snapshotId,
+        });
+      } else if (msg.content.kind === "CODE_COMMENT_REF") {
+        onOpenCodeCommentCard?.({
+          projectId: msg.content.projectId,
+          commentId: msg.content.commentId,
+        });
+      } else if (msg.content.kind === "FILE_REF") {
+        onOpenFileCard?.({
+          grantType: msg.content.grantType,
+          targetId: msg.content.targetId,
         });
       }
     } finally {
@@ -722,6 +851,155 @@ export function ChatPane({
                   </div>
                 )}
 
+                {msg.content.kind === "FILE_REF" && (
+                  <div className="chat-resource-block">
+                    {isDeniedCard && cardView && cardView.state !== "AVAILABLE" ? (
+                      <div className="chat-denied-card-wrap">
+                        <ResourceStateCard state={cardView.state} />
+                        {msg.content.grantType === "AIRDROP_SHARE" &&
+                          cardView.state === "FORBIDDEN" && (
+                            <span className="chat-denied-card-note">
+                              独立空投卡片不扩大权限，仅发送者与未撤销的指定接收人可访问。
+                            </span>
+                          )}
+                      </div>
+                    ) : (
+                      <>
+                        {msg.content.purpose && (
+                          <p className="chat-msg-text">{msg.content.purpose}</p>
+                        )}
+                        {cardView?.state === "AVAILABLE" ? (
+                          <button
+                            type="button"
+                            className={`chat-resource-card-btn ${
+                              msg.content.grantType === "AIRDROP_SHARE"
+                                ? "is-airdrop-card"
+                                : "is-space-file-card"
+                            }`}
+                            disabled={openingCardId === msg.messageId}
+                            onClick={() => {
+                              void handleOpenCard(msg);
+                            }}
+                          >
+                            <div className="chat-resource-card-top">
+                              <span className="chat-resource-kind">
+                                {msg.content.grantType === "SPACE_FILE" ? (
+                                  <FolderOpen size={14} />
+                                ) : (
+                                  <Send size={14} />
+                                )}
+                                {msg.content.grantType === "SPACE_FILE"
+                                  ? "空间文件"
+                                  : "独立空投"}
+                              </span>
+                              <span className="chat-resource-project">
+                                {msg.content.grantType === "SPACE_FILE"
+                                  ? "继承空间权限"
+                                  : "独立接收人授权"}
+                              </span>
+                            </div>
+                            <strong className="chat-resource-label">
+                              {cardView.label}
+                            </strong>
+                            <div className="chat-resource-card-foot">
+                              <code>{shortId(msg.content.targetId)}</code>
+                              <span>
+                                {openingCardId === msg.messageId
+                                  ? "正在校验权限…"
+                                  : isCardResolving
+                                    ? "正在刷新…"
+                                    : msg.content.grantType === "SPACE_FILE"
+                                      ? "打开空间文件区 →"
+                                      : "查看空投并下载 →"}
+                              </span>
+                            </div>
+                          </button>
+                        ) : (
+                          <div className="chat-card-pending-box">
+                            <span>
+                              正在校验
+                              {msg.content.grantType === "SPACE_FILE" ? "空间文件" : "独立空投"}
+                              访问权限…
+                            </span>
+                            {!isCardResolving && (
+                              <Button
+                                className="secondary workbench-btn-xs"
+                                onClick={() => {
+                                  void resolveCardForOpen(msg.messageId);
+                                }}
+                              >
+                                重新解析
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {msg.content.kind === "CODE_COMMENT_REF" && (
+                  <div className="chat-resource-block">
+                    {isDeniedCard && cardView && cardView.state !== "AVAILABLE" ? (
+                      <ResourceStateCard state={cardView.state} />
+                    ) : (
+                      <>
+                        {msg.content.purpose && (
+                          <p className="chat-msg-text">{msg.content.purpose}</p>
+                        )}
+                        {cardView?.state === "AVAILABLE" ? (
+                          <button
+                            type="button"
+                            className="chat-resource-card-btn is-comment-card"
+                            disabled={openingCardId === msg.messageId}
+                            onClick={() => {
+                              void handleOpenCard(msg);
+                            }}
+                          >
+                            <div className="chat-resource-card-top">
+                              <span className="chat-resource-kind">
+                                <FileCode2 size={14} />
+                                代码批注
+                              </span>
+                              <span className="chat-resource-project">
+                                {projectsById.get(msg.content.projectId)?.name ??
+                                  shortId(msg.content.projectId)}
+                              </span>
+                            </div>
+                            <strong className="chat-resource-label">
+                              {cardView.label}
+                            </strong>
+                            <div className="chat-resource-card-foot">
+                              <code>{shortId(msg.content.commentId)}</code>
+                              <span>
+                                {openingCardId === msg.messageId
+                                  ? "正在校验权限…"
+                                  : isCardResolving
+                                    ? "正在刷新…"
+                                    : "定位到双点 Diff 代码行 →"}
+                              </span>
+                            </div>
+                          </button>
+                        ) : (
+                          <div className="chat-card-pending-box">
+                            <span>正在校验代码批注访问权限…</span>
+                            {!isCardResolving && (
+                              <Button
+                                className="secondary workbench-btn-xs"
+                                onClick={() => {
+                                  void resolveCardForOpen(msg.messageId);
+                                }}
+                              >
+                                重新解析
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
                 {msg.discussion && (
                   <div className="chat-discussion-bar">
                     <div className="chat-discussion-status-row">
@@ -959,36 +1237,189 @@ export function ChatPane({
               </div>
             )}
 
-            {draftQuote && (
+            {activeDraftQuote && (
               <div className="chat-composer-banner is-quote">
                 <span>
-                  {draftQuote.kind === "COMMIT_REF" ? (
+                  {activeDraftQuote.kind === "COMMIT_REF" ? (
                     <GitCommitHorizontal size={13} />
-                  ) : (
+                  ) : activeDraftQuote.kind === "WIP_REF" ? (
                     <GitPullRequestDraft size={13} />
+                  ) : activeDraftQuote.grantType === "SPACE_FILE" ? (
+                    <FolderOpen size={13} />
+                  ) : (
+                    <Send size={13} />
                   )}
                   <strong>
-                    {draftQuote.kind === "COMMIT_REF" ? "提交卡片" : "WIP 快照卡片"}
+                    {activeDraftQuote.kind === "COMMIT_REF"
+                      ? "提交卡片"
+                      : activeDraftQuote.kind === "WIP_REF"
+                        ? "WIP 快照卡片"
+                        : activeDraftQuote.grantType === "SPACE_FILE"
+                          ? "空间文件卡片"
+                          : "独立空投卡片"}
                   </strong>
-                  ：{draftQuote.title}
+                  ：{activeDraftQuote.title}
                 </span>
                 <button
                   type="button"
                   aria-label="移除引用卡片"
-                  onClick={onClearDraftQuote}
+                  onClick={clearCurrentQuote}
                 >
                   <X size={13} />
                 </button>
               </div>
             )}
 
+            {showFilePicker && (
+              <div className="chat-file-picker" role="region" aria-label="选择要引用的文件或空投">
+                <div className="chat-file-picker-head">
+                  <div className="chat-file-picker-tabs" role="tablist">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={filePickerTab === "SPACE_FILE"}
+                      className={`chat-file-picker-tab ${
+                        filePickerTab === "SPACE_FILE" ? "active" : ""
+                      }`}
+                      onClick={() => setFilePickerTab("SPACE_FILE")}
+                    >
+                      空间文件
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={filePickerTab === "AIRDROP_SHARE"}
+                      className={`chat-file-picker-tab ${
+                        filePickerTab === "AIRDROP_SHARE" ? "active" : ""
+                      }`}
+                      onClick={() => setFilePickerTab("AIRDROP_SHARE")}
+                    >
+                      独立空投
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="关闭文件选择器"
+                    className="chat-msg-action-btn"
+                    onClick={() => setShowFilePicker(false)}
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+
+                {filePickerTab === "SPACE_FILE" && (
+                  <div className="chat-file-picker-body">
+                    {spaceFilesPickerQuery.isPending && (
+                      <span className="muted">加载空间文件中…</span>
+                    )}
+                    {spaceFilesPickerQuery.isError && (
+                      <span className="chat-inline-error">
+                        {filesErrorText(spaceFilesPickerQuery.error)}
+                      </span>
+                    )}
+                    {spaceFilesPickerQuery.isSuccess &&
+                      spaceFilesPickerQuery.data.items.length === 0 && (
+                        <span className="muted">空间文件区暂无文件可引用。</span>
+                      )}
+                    {spaceFilesPickerQuery.isSuccess &&
+                      spaceFilesPickerQuery.data.items.length > 0 && (
+                        <ul className="chat-file-picker-list">
+                          {spaceFilesPickerQuery.data.items.map((file) => (
+                            <li key={file.fileId}>
+                              <button
+                                type="button"
+                                className="chat-file-picker-item"
+                                onClick={() =>
+                                  applyFileQuote({
+                                    grantType: "SPACE_FILE",
+                                    targetId: file.fileId,
+                                    title: file.fileName,
+                                  })
+                                }
+                              >
+                                <strong>{file.fileName}</strong>
+                                <span>{formatBytes(file.sizeBytes)}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                  </div>
+                )}
+
+                {filePickerTab === "AIRDROP_SHARE" && (
+                  <div className="chat-file-picker-body">
+                    <p className="chat-file-picker-warn">
+                      群聊引用独立空投卡片绝不会扩大接收人权限，非指定接收人仅显示无权占位。
+                    </p>
+                    <div className="chat-file-picker-manual">
+                      <input
+                        type="text"
+                        placeholder="粘贴空投分享 ID…"
+                        value={manualAirdropId}
+                        onChange={(e) => setManualAirdropId(e.target.value)}
+                      />
+                      <Button
+                        className="secondary workbench-btn-xs"
+                        disabled={!manualAirdropId.trim()}
+                        onClick={() => {
+                          const shareId = manualAirdropId.trim();
+                          if (!shareId) return;
+                          applyFileQuote({
+                            grantType: "AIRDROP_SHARE",
+                            targetId: shareId,
+                            title: `空投 ${shortId(shareId)}`,
+                          });
+                        }}
+                      >
+                        引用 ID
+                      </Button>
+                    </div>
+                    {airdropsPickerQuery.isPending && (
+                      <span className="muted">加载可用空投中…</span>
+                    )}
+                    {airdropsPickerQuery.isError && (
+                      <span className="chat-inline-error">
+                        {filesErrorText(airdropsPickerQuery.error)}
+                      </span>
+                    )}
+                    {airdropsPickerQuery.isSuccess &&
+                      airdropsPickerQuery.data.items.filter((s) => !s.revoked).length > 0 && (
+                        <ul className="chat-file-picker-list">
+                          {airdropsPickerQuery.data.items
+                            .filter((s) => !s.revoked)
+                            .map((share) => (
+                              <li key={share.shareId}>
+                                <button
+                                  type="button"
+                                  className="chat-file-picker-item"
+                                  onClick={() =>
+                                    applyFileQuote({
+                                      grantType: "AIRDROP_SHARE",
+                                      targetId: share.shareId,
+                                      title: share.title,
+                                    })
+                                  }
+                                >
+                                  <strong>{share.title}</strong>
+                                  <span>{shortId(share.shareId)}</span>
+                                </button>
+                              </li>
+                            ))}
+                        </ul>
+                      )}
+                  </div>
+                )}
+              </div>
+            )}
+
             <textarea
               ref={composerInputRef}
               rows={3}
-              maxLength={draftQuote ? 4000 : 8000}
+              maxLength={activeDraftQuote ? 4000 : 8000}
               value={composerText}
               placeholder={
-                draftQuote
+                activeDraftQuote
                   ? "补充引用说明或讨论问题（可选）…"
                   : "输入空间讨论内容…（Ctrl/Cmd + Enter 发送）"
               }
@@ -1002,13 +1433,27 @@ export function ChatPane({
             />
 
             <div className="chat-composer-footer">
-              <span className="chat-composer-hint">
-                {draftQuote ? "发送不可变代码引用卡片" : "支持文本与代码节点引用"}
-              </span>
+              <div className="chat-composer-left-tools">
+                <Button
+                  className="secondary workbench-btn-xs"
+                  onClick={() => setShowFilePicker((prev) => !prev)}
+                >
+                  <Paperclip size={12} /> 引用文件
+                </Button>
+                <span className="chat-composer-hint">
+                  {activeDraftQuote
+                    ? activeDraftQuote.kind === "FILE_REF"
+                      ? activeDraftQuote.grantType === "SPACE_FILE"
+                        ? "发送空间文件引用卡片"
+                        : "发送独立空投卡片（不扩大权限）"
+                      : "发送不可变代码引用卡片"
+                    : "支持文本、代码与文件引用"}
+                </span>
+              </div>
               <Button
                 type="submit"
                 className="primary workbench-btn-xs"
-                disabled={!draftQuote && !composerText.trim()}
+                disabled={!activeDraftQuote && !composerText.trim()}
               >
                 <Send size={13} /> 发送
               </Button>

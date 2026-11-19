@@ -25,17 +25,27 @@ export function errorText(error: unknown) {
     case "DEVICE_ACCESS_DENIED": return "当前账号无权完成此操作。";
     case "RESOURCE_NOT_FOUND": return "未找到对应记录，请检查输入后重试。";
     case "INVALID_REQUEST": return "提交的信息无效或已过期，请核对后重试。";
+    case "QUOTA_EXCEEDED": return "存储配额不足，请清理旧文件或联系管理员调整配额后重试。";
+    case "SHARE_REVOKED": return "该空投分享或你的接收权限已被发送者撤销。";
+    case "DOWNLOAD_LIMIT_EXCEEDED": return "已达到该空投为你设置的下载次数上限。";
+    case "NOT_FRIENDS_FOR_AIRDROP": return "只能向当前有效好友发起独立文件空投，请先确认好友关系。";
+    case "DIFF_DATA_INSUFFICIENT": return "两端点共享内容或基础对象不足以计算完整差异，请按提示补传内容。";
     default: return "服务暂时无法完成请求，请稍后重试。";
   }
 }
 
-async function request<T>(path: string, init: RequestInit): Promise<T> {
+async function rawRequest(path: string, init: RequestInit): Promise<Response> {
   if (!path.startsWith("/") || path.startsWith("//")) throw new Error("Invalid API path");
   const response = await fetch(base + path, { cache: "no-store", redirect: "error", ...init });
   if (!response.ok) {
     const fault: Partial<ApiError> = await response.json().catch(() => ({}));
     throw new HttpError(response.status, fault?.code, fault?.requestId, fault?.details);
   }
+  return response;
+}
+
+async function request<T>(path: string, init: RequestInit): Promise<T> {
+  const response = await rawRequest(path, init);
   const body = await response.text();
   return body ? JSON.parse(body) as T : undefined as T;
 }
@@ -120,7 +130,7 @@ export function publicPost(path: string, value: unknown) {
   return request<void>(path, { ...jsonBody(value), credentials: "omit" });
 }
 
-export async function api<T>(path: string, init: RequestInit = {}, access?: SpaceAccess): Promise<T> {
+export async function apiRaw(path: string, init: RequestInit = {}, access?: SpaceAccess): Promise<Response> {
   const expected = generation;
   const send = async (session: AccessSession | null) => {
     checkGeneration(expected);
@@ -132,10 +142,10 @@ export async function api<T>(path: string, init: RequestInit = {}, access?: Spac
       signals.push(spaceSignal(access));
     }
     const signal = signals.length ? AbortSignal.any(signals) : undefined;
-    const data = await request<T>(path, { ...init, headers, signal, credentials: "omit" });
+    const response = await rawRequest(path, { ...init, headers, signal, credentials: "omit" });
     checkGeneration(expected);
     signal?.throwIfAborted();
-    return data;
+    return response;
   };
   const original = useAuth.getState().session;
   try {
@@ -164,4 +174,15 @@ export async function api<T>(path: string, init: RequestInit = {}, access?: Spac
     }
     throw error;
   }
+}
+
+export async function api<T>(path: string, init: RequestInit = {}, access?: SpaceAccess): Promise<T> {
+  const expected = generation;
+  const response = await apiRaw(path, init, access);
+  const body = await response.text();
+  checkGeneration(expected);
+  if (init.signal?.aborted || (access && spaceSignal(access).aborted)) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+  return body ? JSON.parse(body) as T : undefined as T;
 }
