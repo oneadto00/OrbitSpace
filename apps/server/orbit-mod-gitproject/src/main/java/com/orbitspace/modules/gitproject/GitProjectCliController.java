@@ -2,6 +2,9 @@ package com.orbitspace.modules.gitproject;
 
 import com.orbitspace.kernel.DevicePrincipal;
 import com.orbitspace.kernel.SpaceRole;
+import com.orbitspace.modules.gitproject.GitDiffCommentDtos.BackfillCheckResponse;
+import com.orbitspace.modules.gitproject.GitDiffCommentDtos.BackfillReceiptDto;
+import com.orbitspace.modules.gitproject.GitDiffCommentDtos.BackfillSessionDto;
 import com.orbitspace.modules.gitproject.GitProjectDtos.CaptureReceiptDto;
 import com.orbitspace.modules.gitproject.GitProjectDtos.ParseJobDto;
 import com.orbitspace.modules.gitproject.GitProjectDtos.ReportSessionDto;
@@ -17,20 +20,25 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
 
-/** CLI REST controller implementing the 7 DEVICE routes in gitproject-cli.yaml. */
+/** CLI REST controller implementing DEVICE routes in gitproject-cli.yaml and p2-files-diff.yaml. */
 @RestController
 public class GitProjectCliController {
     private static final String IDEMPOTENCY_HEADER = "Idempotency-Key";
+    private static final String BACKFILL_SHA256_HEADER = "X-Backfill-Sha256";
 
     private final GitProjectService gitProjects;
+    private final GitBackfillService backfill;
 
-    public GitProjectCliController(GitProjectService gitProjects) {
+    public GitProjectCliController(
+            GitProjectService gitProjects, GitBackfillService backfill) {
         this.gitProjects = gitProjects;
+        this.backfill = backfill;
     }
 
     @PostMapping("/api/v1/cli/projects/{projectId}/worktrees")
@@ -110,5 +118,52 @@ public class GitProjectCliController {
             @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey) {
         return gitProjects.retryOwnReportParse(
                 device, projectId, snapshotId, jobId, idempotencyKey);
+    }
+
+    @PostMapping("/api/v1/cli/projects/{projectId}/backfill/check")
+    @RequireSpaceRole(value = SpaceRole.MEMBER, deviceScope = "metadata:write")
+    public BackfillCheckResponse checkBackfill(
+            @AuthenticationPrincipal DevicePrincipal device,
+            @PathVariable String projectId,
+            @RequestBody(required = false) String rawBody) {
+        return backfill.checkBackfill(device, projectId, rawBody);
+    }
+
+    @PostMapping("/api/v1/cli/projects/{projectId}/backfill/sessions")
+    @ResponseStatus(HttpStatus.CREATED)
+    @RequireSpaceRole(value = SpaceRole.MEMBER, deviceScope = "patch:write")
+    public BackfillSessionDto createBackfillSession(
+            @AuthenticationPrincipal DevicePrincipal device,
+            @PathVariable String projectId,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey,
+            @RequestBody(required = false) String rawBody) {
+        return backfill.createBackfillSession(device, projectId, idempotencyKey, rawBody);
+    }
+
+    @PutMapping("/api/v1/cli/projects/{projectId}/backfill/sessions/{backfillId}/objects")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @RequireSpaceRole(value = SpaceRole.MEMBER, deviceScope = "patch:write")
+    public void uploadBackfillObjects(
+            @AuthenticationPrincipal DevicePrincipal device,
+            @PathVariable String projectId,
+            @PathVariable String backfillId,
+            @RequestParam(value = "path", required = false) String path,
+            @RequestHeader(value = BACKFILL_SHA256_HEADER, required = false) String sha256Header,
+            HttpServletRequest request)
+            throws IOException {
+        backfill.uploadBackfillObject(
+                device, projectId, backfillId, path, sha256Header, request.getInputStream());
+    }
+
+    @PostMapping("/api/v1/cli/projects/{projectId}/backfill/sessions/{backfillId}/complete")
+    @RequireSpaceRole(value = SpaceRole.MEMBER, deviceScope = "patch:write")
+    public BackfillReceiptDto completeBackfillSession(
+            @AuthenticationPrincipal DevicePrincipal device,
+            @PathVariable String projectId,
+            @PathVariable String backfillId,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey,
+            @RequestBody(required = false) String rawBody) {
+        return backfill.completeBackfillSession(
+                device, projectId, backfillId, idempotencyKey, rawBody);
     }
 }

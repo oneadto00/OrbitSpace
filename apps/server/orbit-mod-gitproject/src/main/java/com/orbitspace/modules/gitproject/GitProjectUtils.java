@@ -547,7 +547,13 @@ final class GitProjectUtils {
         }
     }
 
-    private static void requireSafeRelativePath(String path) {
+    static void requireSafeRelativePath(String path) {
+        if (!isSafeRelativePath(path)) {
+            throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    static boolean isSafeRelativePath(String path) {
         if (path == null
                 || path.isEmpty()
                 || path.length() > 1024
@@ -556,12 +562,33 @@ final class GitProjectUtils {
                 || path.contains("\0")
                 || path.contains("//")
                 || path.contains("\\")) {
-            throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+            return false;
         }
-        for (String segment : path.split("/", -1)) {
-            if (segment.isEmpty() || ".".equals(segment) || "..".equals(segment)) {
-                throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+        for (int i = 0; i < path.length(); i++) {
+            char c = path.charAt(i);
+            if (c < 0x20 || c == 0x7f) {
+                return false;
             }
         }
+        for (String segment : path.split("/", -1)) {
+            if (segment.isEmpty()
+                    || ".".equals(segment)
+                    || "..".equals(segment)
+                    || ".git".equalsIgnoreCase(segment)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static String requireBoundedText(String raw, int maxCodePoints) {
+        if (raw == null) {
+            throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+        }
+        String trimmed = raw.strip();
+        if (trimmed.isEmpty() || trimmed.codePointCount(0, trimmed.length()) > maxCodePoints) {
+            throw new DomainException(KernelErrorCode.INVALID_REQUEST);
+        }
+        return trimmed;
     }
 }

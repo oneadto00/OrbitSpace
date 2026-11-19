@@ -21,6 +21,9 @@ import java.util.function.Consumer;
 @Import({
     GitProjectIdempotencyStore.class,
     GitProjectScopeService.class,
+    GitBackfillService.class,
+    GitTwoPointDiffService.class,
+    GitCodeCommentService.class,
     GitProjectService.class,
     GitWipPatchParseProcessor.class,
     GitProjectController.class,
@@ -48,6 +51,25 @@ public class GitProjectAutoConfiguration {
                         accountRoute(
                                 "POST",
                                 "/api/v1/spaces/{spaceId}/projects/{projectId}/snapshots/{snapshotId}/parse-jobs/{jobId}/retry"),
+                        accountRoute("POST", "/api/v1/spaces/{spaceId}/projects/{projectId}/diffs"),
+                        accountRoute(
+                                "GET",
+                                "/api/v1/spaces/{spaceId}/projects/{projectId}/diffs/{diffId}"),
+                        accountRoute(
+                                "GET",
+                                "/api/v1/spaces/{spaceId}/projects/{projectId}/code-comments"),
+                        accountRoute(
+                                "POST",
+                                "/api/v1/spaces/{spaceId}/projects/{projectId}/code-comments"),
+                        accountRoute(
+                                "POST",
+                                "/api/v1/spaces/{spaceId}/projects/{projectId}/code-comments/{commentId}/replies"),
+                        accountRoute(
+                                "POST",
+                                "/api/v1/spaces/{spaceId}/projects/{projectId}/code-comments/{commentId}/discussion"),
+                        accountRoute(
+                                "POST",
+                                "/api/v1/spaces/{spaceId}/projects/{projectId}/code-comments/{commentId}/forward-chat"),
                         deviceRoute("POST", "/api/v1/cli/projects/{projectId}/worktrees"),
                         deviceRoute(
                                 "POST",
@@ -64,7 +86,15 @@ public class GitProjectAutoConfiguration {
                                 "/api/v1/cli/projects/{projectId}/worktrees/{worktreeId}/clean"),
                         deviceRoute(
                                 "POST",
-                                "/api/v1/cli/projects/{projectId}/snapshots/{snapshotId}/parse-jobs/{jobId}/retry"));
+                                "/api/v1/cli/projects/{projectId}/snapshots/{snapshotId}/parse-jobs/{jobId}/retry"),
+                        deviceRoute("POST", "/api/v1/cli/projects/{projectId}/backfill/check"),
+                        deviceRoute("POST", "/api/v1/cli/projects/{projectId}/backfill/sessions"),
+                        deviceRoute(
+                                "PUT",
+                                "/api/v1/cli/projects/{projectId}/backfill/sessions/{backfillId}/objects"),
+                        deviceRoute(
+                                "POST",
+                                "/api/v1/cli/projects/{projectId}/backfill/sessions/{backfillId}/complete"));
     }
 
     @Bean("orbitReplayRESOURCE_FORCE_PURGE")

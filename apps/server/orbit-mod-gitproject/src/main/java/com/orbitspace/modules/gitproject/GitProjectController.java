@@ -4,6 +4,9 @@ import com.orbitspace.kernel.AuthenticatedPrincipal;
 import com.orbitspace.kernel.DomainException;
 import com.orbitspace.kernel.KernelErrorCode;
 import com.orbitspace.kernel.SpaceRole;
+import com.orbitspace.modules.gitproject.GitDiffCommentDtos.CodeCommentDto;
+import com.orbitspace.modules.gitproject.GitDiffCommentDtos.CodeCommentListResponse;
+import com.orbitspace.modules.gitproject.GitDiffCommentDtos.TwoPointDiffDto;
 import com.orbitspace.modules.gitproject.GitProjectDtos.CommitDetailDto;
 import com.orbitspace.modules.gitproject.GitProjectDtos.GitProjectDto;
 import com.orbitspace.modules.gitproject.GitProjectDtos.ParseJobDto;
@@ -31,16 +34,23 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 
 import java.io.InputStream;
 
-/** Browser REST controller implementing the 7 ACCOUNT routes in gitproject-cli.yaml. */
+/** Browser REST controller implementing ACCOUNT routes in gitproject-cli.yaml and p2-files-diff.yaml. */
 @RestController
 public class GitProjectController {
     private static final String EPOCH_HEADER = "X-Membership-Epoch";
     private static final String IDEMPOTENCY_HEADER = "Idempotency-Key";
 
     private final GitProjectService gitProjects;
+    private final GitTwoPointDiffService twoPointDiffs;
+    private final GitCodeCommentService codeComments;
 
-    public GitProjectController(GitProjectService gitProjects) {
+    public GitProjectController(
+            GitProjectService gitProjects,
+            GitTwoPointDiffService twoPointDiffs,
+            GitCodeCommentService codeComments) {
         this.gitProjects = gitProjects;
+        this.twoPointDiffs = twoPointDiffs;
+        this.codeComments = codeComments;
     }
 
     @PostMapping("/api/v1/spaces/{spaceId}/projects")
@@ -152,6 +162,132 @@ public class GitProjectController {
                 snapshotId,
                 jobId,
                 idempotencyKey);
+    }
+
+    @PostMapping("/api/v1/spaces/{spaceId}/projects/{projectId}/diffs")
+    @ResponseStatus(HttpStatus.CREATED)
+    @RequireSpaceRole(SpaceRole.VIEWER)
+    public TwoPointDiffDto createTwoPointDiff(
+            @AuthenticationPrincipal AuthenticatedPrincipal account,
+            @PathVariable String spaceId,
+            @PathVariable String projectId,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey,
+            @RequestBody(required = false) String rawBody,
+            HttpServletRequest request) {
+        return twoPointDiffs.createTwoPointDiff(
+                spaceId,
+                projectId,
+                account.userId(),
+                membershipEpoch(request),
+                idempotencyKey,
+                rawBody);
+    }
+
+    @GetMapping("/api/v1/spaces/{spaceId}/projects/{projectId}/diffs/{diffId}")
+    @RequireSpaceRole(SpaceRole.VIEWER)
+    public TwoPointDiffDto getTwoPointDiff(
+            @AuthenticationPrincipal AuthenticatedPrincipal account,
+            @PathVariable String spaceId,
+            @PathVariable String projectId,
+            @PathVariable String diffId,
+            HttpServletRequest request) {
+        return twoPointDiffs.getTwoPointDiff(
+                spaceId, projectId, account.userId(), membershipEpoch(request), diffId);
+    }
+
+    @GetMapping("/api/v1/spaces/{spaceId}/projects/{projectId}/code-comments")
+    @RequireSpaceRole(SpaceRole.VIEWER)
+    public CodeCommentListResponse listCodeComments(
+            @AuthenticationPrincipal AuthenticatedPrincipal account,
+            @PathVariable String spaceId,
+            @PathVariable String projectId,
+            @RequestParam(value = "diffId", required = false) String diffId,
+            @RequestParam(value = "path", required = false) String path,
+            HttpServletRequest request) {
+        return codeComments.listCodeComments(
+                spaceId, projectId, account.userId(), membershipEpoch(request), diffId, path);
+    }
+
+    @PostMapping("/api/v1/spaces/{spaceId}/projects/{projectId}/code-comments")
+    @ResponseStatus(HttpStatus.CREATED)
+    @RequireSpaceRole(SpaceRole.MEMBER)
+    public CodeCommentDto createCodeComment(
+            @AuthenticationPrincipal AuthenticatedPrincipal account,
+            @PathVariable String spaceId,
+            @PathVariable String projectId,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey,
+            @RequestBody(required = false) String rawBody,
+            HttpServletRequest request) {
+        return codeComments.createCodeComment(
+                spaceId,
+                projectId,
+                account.userId(),
+                membershipEpoch(request),
+                idempotencyKey,
+                rawBody);
+    }
+
+    @PostMapping("/api/v1/spaces/{spaceId}/projects/{projectId}/code-comments/{commentId}/replies")
+    @ResponseStatus(HttpStatus.CREATED)
+    @RequireSpaceRole(SpaceRole.MEMBER)
+    public CodeCommentDto replyCodeComment(
+            @AuthenticationPrincipal AuthenticatedPrincipal account,
+            @PathVariable String spaceId,
+            @PathVariable String projectId,
+            @PathVariable String commentId,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey,
+            @RequestBody(required = false) String rawBody,
+            HttpServletRequest request) {
+        return codeComments.replyCodeComment(
+                spaceId,
+                projectId,
+                commentId,
+                account.userId(),
+                membershipEpoch(request),
+                idempotencyKey,
+                rawBody);
+    }
+
+    @PostMapping(
+            "/api/v1/spaces/{spaceId}/projects/{projectId}/code-comments/{commentId}/discussion")
+    @RequireSpaceRole(SpaceRole.MEMBER)
+    public CodeCommentDto changeCodeCommentDiscussion(
+            @AuthenticationPrincipal AuthenticatedPrincipal account,
+            @PathVariable String spaceId,
+            @PathVariable String projectId,
+            @PathVariable String commentId,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey,
+            @RequestBody(required = false) String rawBody,
+            HttpServletRequest request) {
+        return codeComments.changeCodeCommentDiscussion(
+                spaceId,
+                projectId,
+                commentId,
+                account.userId(),
+                membershipEpoch(request),
+                idempotencyKey,
+                rawBody);
+    }
+
+    @PostMapping(
+            "/api/v1/spaces/{spaceId}/projects/{projectId}/code-comments/{commentId}/forward-chat")
+    @RequireSpaceRole(SpaceRole.MEMBER)
+    public CodeCommentDto forwardCodeCommentToChat(
+            @AuthenticationPrincipal AuthenticatedPrincipal account,
+            @PathVariable String spaceId,
+            @PathVariable String projectId,
+            @PathVariable String commentId,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey,
+            @RequestBody(required = false) String rawBody,
+            HttpServletRequest request) {
+        return codeComments.forwardCodeCommentToChat(
+                spaceId,
+                projectId,
+                commentId,
+                account.userId(),
+                membershipEpoch(request),
+                idempotencyKey,
+                rawBody);
     }
 
     private static long membershipEpoch(HttpServletRequest request) {
