@@ -1,0 +1,14 @@
+.document-pane { display: grid; gap: 1rem; padding: 1rem; min-width: 0; color: inherit }
+.document-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem }
+.document-pane .tiptap { min-height: 12rem; padding: 1rem; border: 1px solid #a2aab5; border-radius: .4rem; overflow-wrap: anywhere }
+.document-pane .tiptap ul { list-style: disc; padding-inline-start: 1.5rem }
+.document-pane .tiptap ol { list-style: decimal; padding-inline-start: 1.5rem }
+.document-pane .tiptap h1 { font-size: 1.8rem }
+.document-pane .tiptap h2 { font-size: 1.5rem }
+.document-pane pre { max-height: 44vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere }
+.document-pane blockquote { padding-inline-start: 1rem; border-inline-start: 3px solid currentColor }
+.document-pane fieldset label { display: block }
+.pdf-sheet { position: relative; width: fit-content; max-width: 100%; line-height: 0; touch-action: none; background: white }
+.pdf-sheet canvas { width: 100%; height: auto }
+.pdf-mark { position: absolute; background: rgba(251, 191, 36, .35); outline: 1px solid #9a6700; pointer-events: none }
+.document-citation { display: inline-block; text-decoration: underline; margin-inline-end: .75rem }
