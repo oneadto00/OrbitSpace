@@ -98,10 +98,7 @@ public class P3LifecycleGuardiansAutoConfiguration {
                 docAutoVersionRetention);
     }
 
-    /**
-     * Scheduled P3 guardians for full CRDT snapshot solidification (using real Y.Doc load rather
-     * than naive update concatenation) and boundary-safe retention pruning.
-     */
+    /** Reconstructs the Y.Doc before snapshotting. Retention pruning uses the persisted load boundary. */
     public static class P3LifecycleGuardians {
         private static final Logger log = LoggerFactory.getLogger(P3LifecycleGuardians.class);
         private static final int DOC_BATCH_LIMIT = 32;
@@ -173,10 +170,6 @@ public class P3LifecycleGuardiansAutoConfiguration {
                             .build();
         }
 
-        /**
-         * Solidifies full CRDT snapshots for active documents with uncompacted batches by loading
-         * the full Y.Doc state through collab-hocuspocus and persisting an immutable snapshot.
-         */
         @Scheduled(fixedDelayString = "${orbit.guardians.doc-snapshot-interval:PT5M}")
         public void solidifyDocumentCrdtSnapshots() {
             ObjectStoragePort storage = objectStorageProvider.getIfAvailable();

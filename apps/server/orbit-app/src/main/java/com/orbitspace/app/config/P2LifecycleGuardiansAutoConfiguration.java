@@ -35,10 +35,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * Configures P2 scheduled lifecycle recovery guardians for expired chunked upload/backfill
- * sessions, expired airdrop file shares, and stale external worker async jobs.
- */
 @AutoConfiguration(afterName = {
     "com.orbitspace.platform.PlatformAutoConfiguration",
     "com.orbitspace.modules.identity.IdentityAutoConfiguration",
@@ -70,10 +66,6 @@ public class P2LifecycleGuardiansAutoConfiguration {
                 pendingJobGrace);
     }
 
-    /**
-     * Scheduled P2 background guardians for upload/backfill session cleanup, share expiration, and
-     * external worker async job lease/retry recovery.
-     */
     public static class P2LifecycleGuardians {
         private static final Logger log = LoggerFactory.getLogger(P2LifecycleGuardians.class);
         private static final int BATCH_LIMIT = 200;

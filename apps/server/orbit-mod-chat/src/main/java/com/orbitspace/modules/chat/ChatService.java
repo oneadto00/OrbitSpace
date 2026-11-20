@@ -76,7 +76,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-/** Core transactional domain service for room chat, dual-cursor sync, read state, and cards. */
 public class ChatService
         implements SpaceRoomPort, ChatUnreadQueryPort, DiscussionThreadPort, ResourceLifecycleHook {
     static final String ROOM_EVENTS_CHANNEL = "orbit:chat:room-events";

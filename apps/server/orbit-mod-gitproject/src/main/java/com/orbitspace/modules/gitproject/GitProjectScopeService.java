@@ -16,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 
-/** Implements kernel ProjectScopePort and ResourceCardVerifierPort for Git projects and snapshots. */
 public class GitProjectScopeService implements ProjectScopePort, ResourceCardVerifierPort {
     private record WipCardRow(
             String branchName, String captureState, String note, String lifecycleState) {}

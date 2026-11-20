@@ -14,7 +14,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.orbitspace.kernel.OutboxEventHandler;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
-/** Spring Boot auto-configuration for P2 internal worker callback endpoints and HMAC anti-replay. */
 @AutoConfiguration
 @Import({
     IntegrationHmacSupport.class,

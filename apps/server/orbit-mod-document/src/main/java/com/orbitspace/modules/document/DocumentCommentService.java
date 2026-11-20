@@ -79,7 +79,7 @@ class DocumentCommentService implements ResourceCardVerifierPort, ResourceLifecy
                 pdf.getObject().validateAnchor(a, file, fileVersion, anchor);
             }
             String message = text(body, "body", 8000), id = id();
-            // The root contains no retained excerpt. Step 13 attaches the typed card to this same thread.
+            // Keep the selected excerpt out of the discussion root.
             var root = chat.getObject().sendMessage(a.user(), a.space(), a.epoch(),
                     new SendMessageRequest(
                             id(), null, new TextContent(document ? "协作文档批注讨论" : "PDF 批注讨论")));

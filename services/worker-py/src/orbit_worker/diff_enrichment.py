@@ -233,7 +233,6 @@ def enrich_diff_payload(raw_bytes: bytes, max_output_bytes: int) -> bytes:
     }
     encoded = json.dumps(result, ensure_ascii=False).encode("utf-8")
     if len(encoded) > max_output_bytes:
-        # Trim symbols safely rather than overflowing max_output_bytes.
         compact = {
             "diffId": result["diffId"],
             "files": [

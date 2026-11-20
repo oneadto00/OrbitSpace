@@ -105,7 +105,6 @@ const backfillReceiptSchema = z.object({
 const endpointKey = (endpoint: DiffEndpointRef) => `${endpoint.kind}:${endpoint.id}`;
 const shortId = (id: string) => (id.length <= 12 ? id : id.slice(0, 12));
 
-/** Resolve a CLI commit OID/ref or WIP snapshot identifier into a DiffEndpointRef. */
 async function resolveEndpoint(root: string, raw: string): Promise<DiffEndpointRef> {
   if (!raw || /\s/.test(raw)) throw new Error('端点标识不能为空或包含空白字符');
   const prefixed = raw.match(/^(commit|wip|snapshot):(.+)$/i);
@@ -130,7 +129,6 @@ async function resolveEndpoint(root: string, raw: string): Promise<DiffEndpointR
   return { kind: 'WIP', id: raw };
 }
 
-/** Derive the comparison base endpoint when --base is omitted. */
 async function resolveBaseEndpoint(root: string, target: DiffEndpointRef, rawBase?: string): Promise<DiffEndpointRef> {
   if (rawBase !== undefined) return resolveEndpoint(root, rawBase);
   if (target.kind === 'COMMIT') {
@@ -141,7 +139,6 @@ async function resolveBaseEndpoint(root: string, target: DiffEndpointRef, rawBas
   return head ? { kind: 'COMMIT', id: head } : target;
 }
 
-/** Group server-reported missing items by endpoint and verify safety/scope invariants. */
 function groupMissingItems(
   items: BackfillMissingItem[],
   baseEndpoint: DiffEndpointRef,
@@ -187,7 +184,6 @@ interface CollectContext {
   warnings: string[];
 }
 
-/** Filter and collect allowed missing objects for one endpoint under P1 privacy rules. */
 async function collectEndpointPlan(
   ctx: CollectContext,
   endpoint: DiffEndpointRef,
@@ -360,7 +356,6 @@ async function collectBackfill(
   };
 }
 
-/** Print the final terminal preview for the frozen backfill payload. */
 function previewBackfill(
   frozen: FrozenBackfill,
   projectId: string,
@@ -425,7 +420,6 @@ function previewBackfill(
   );
 }
 
-/** Execute one idempotent backfill session (create -> upload required objects -> complete). */
 async function uploadEndpointSession(
   origin: string,
   projectId: string,
@@ -531,7 +525,6 @@ function assertFrozenMatch(frozen: FrozenBackfill, now: FrozenBackfill) {
   }
 }
 
-/** Run the P2 controlled content backfill and incremental object sync flow. */
 export async function backfill(
   root: string,
   _instance: string,

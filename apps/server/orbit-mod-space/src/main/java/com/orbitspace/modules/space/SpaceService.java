@@ -43,7 +43,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Core transactional domain service for spaces, invitations, RBAC, and membership_epoch revocation. */
 public class SpaceService {
     private static final Logger LOG = LoggerFactory.getLogger(SpaceService.class);
     private static final String EVENTS_CHANNEL = "orbit:events";

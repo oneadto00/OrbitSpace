@@ -13,7 +13,6 @@ import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
 
-/** Immutable DTOs and request records for chunked upload, space files, airdrops, and downloads. */
 public final class FileDtos {
     private FileDtos() {}
 

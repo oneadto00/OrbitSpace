@@ -11,7 +11,6 @@ import org.springframework.context.annotation.Import;
 
 import java.util.List;
 
-/** Spring Boot auto-configuration registering friendship routes, service, and FriendshipQueryPort. */
 @AutoConfiguration
 @Import({FriendshipService.class, FriendshipController.class})
 public class FriendshipAutoConfiguration {

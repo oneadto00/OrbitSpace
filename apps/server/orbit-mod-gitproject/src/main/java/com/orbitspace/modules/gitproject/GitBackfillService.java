@@ -58,7 +58,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 
-/** Domain service implementing P2 CLI controlled content backfill check, staging, and promotion. */
 public class GitBackfillService {
     private static final Duration BACKFILL_SESSION_TTL = Duration.ofMinutes(15);
     private static final int MAX_BACKFILL_FILES = 512;

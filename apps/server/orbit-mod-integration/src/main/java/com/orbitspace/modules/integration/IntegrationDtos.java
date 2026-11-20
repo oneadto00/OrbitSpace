@@ -12,7 +12,6 @@ import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
 
-/** Immutable DTOs for the authenticated internal worker gateway (/internal/v1/jobs/**). */
 public final class IntegrationDtos {
     private IntegrationDtos() {}
 

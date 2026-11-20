@@ -388,7 +388,6 @@ export function CodeCommentPanel({
         </div>
       )}
 
-      {/* Line-anchored composer */}
       {composerDraft && canUploadOrManage && (
         <form className="comment-composer-card" onSubmit={handleCreateSubmit}>
           <div className="comment-composer-head">
@@ -494,7 +493,6 @@ export function CodeCommentPanel({
         </form>
       )}
 
-      {/* Filter bar */}
       <div className="comment-filter-bar">
         <div className="comment-tab-group" role="tablist" aria-label="批注显示范围">
           {selectedFile && (
@@ -619,7 +617,6 @@ export function CodeCommentPanel({
 
                 <p className="comment-body-text">{comment.bodyText}</p>
 
-                {/* Replies from unified discussion thread */}
                 {comment.replies.length > 0 && (
                   <ul className="comment-reply-list" aria-label="统一讨论回复">
                     {comment.replies.map((reply) => (
@@ -646,7 +643,6 @@ export function CodeCommentPanel({
                   </div>
                 )}
 
-                {/* Action bar */}
                 {canUploadOrManage && (
                   <div className="comment-card-actions">
                     <Button
@@ -715,7 +711,6 @@ export function CodeCommentPanel({
                   </div>
                 )}
 
-                {/* Optional conclusion reply selector when resolving */}
                 {isResolvingHere && canUploadOrManage && !isResolved && (
                   <div className="comment-conclusion-box">
                     <label className="comment-coord-field">
@@ -740,7 +735,6 @@ export function CodeCommentPanel({
                   </div>
                 )}
 
-                {/* Inline reply composer */}
                 {isReplyingHere && canUploadOrManage && (
                   <form
                     className="comment-reply-form"

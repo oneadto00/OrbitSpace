@@ -229,9 +229,8 @@ public class RecoveryLedger implements RevocationLedgerPort {
                         supplied.effectiveAt().truncatedTo(ChronoUnit.MICROS));
         State state = lock();
         Remote remote = authority(state);
-        // A prior business transaction may have rolled back after independent publication. Apply
-        // the
-        // conservative revocation before the next append. Recovery handlers must be idempotent.
+        // A business transaction can roll back after publishing to the independent ledger.
+        // Replay those revocations before the next append. Recovery handlers must be idempotent.
         for (long n = state.applied + 1; n <= remote.head.sequence; n++) {
             Encoded e = entry(n);
             if (!e.value.revocation.equals(r)) replay(new Entry(n, e.value.revocation));

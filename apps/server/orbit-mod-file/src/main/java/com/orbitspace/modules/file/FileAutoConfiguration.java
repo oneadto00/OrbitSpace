@@ -11,7 +11,6 @@ import org.springframework.context.annotation.Import;
 
 import java.util.List;
 
-/** Spring Boot auto-configuration registering P2 file upload, space files, airdrop, and download routes. */
 @AutoConfiguration
 @Import({FileService.class, FileController.class})
 public class FileAutoConfiguration {

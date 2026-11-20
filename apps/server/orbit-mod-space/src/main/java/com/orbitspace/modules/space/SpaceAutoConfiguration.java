@@ -15,7 +15,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.util.List;
 import java.util.function.Consumer;
 
-/** Spring Boot auto-configuration registering space routes, services, RBAC port, and ledger replay. */
 @AutoConfiguration
 @Import({
     SpaceAuthorizationService.class,

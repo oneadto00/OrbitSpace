@@ -268,10 +268,6 @@ function BackfillCommandHints({
   );
 }
 
-/**
- * Controlled P2 two-point diff drawer enforcing the five-state content_manifest
- * honesty boundary and hosting line-anchored code comments.
- */
 export function TwoPointDiffDrawer({
   spaceId,
   projectId,
@@ -368,13 +364,11 @@ export function TwoPointDiffDrawer({
   const isInitialLoading =
     (effectiveDiffIdToLoad ? detailQuery.isPending : createQuery.isPending) && !diff;
 
-  // File tree & line selection state
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [fileFilterMode, setFileFilterMode] = useState<"ALL" | "COMPARABLE" | "INCOMPARABLE">("ALL");
   const [fileSearch, setFileSearch] = useState("");
   const [showAllPatchLines, setShowAllPatchLines] = useState(false);
 
-  // Code comment focus & composer sync
   const [composerDraft, setComposerDraft] = useState<CommentComposerDraft | null>(null);
   const [focusedCommentId, setFocusedCommentId] = useState<string | null>(null);
   const [lineFlashState, setLineFlashState] = useState<{
@@ -391,7 +385,6 @@ export function TwoPointDiffDrawer({
   const resolvedBase = diff?.base ?? base;
   const resolvedTarget = diff?.target ?? target;
 
-  // Comments relevant to this two-point diff (by diffId or identical endpoints)
   const diffComments = useMemo(() => {
     return comments.filter((c) => {
       if (diff && c.diffId && c.diffId === diff.diffId) return true;
@@ -409,7 +402,6 @@ export function TwoPointDiffDrawer({
     return map;
   }, [diffComments]);
 
-  // Auto-select first file when diff loads if none selected
   useEffect(() => {
     if (!diff || diff.files.length === 0) return;
     if (
@@ -430,7 +422,6 @@ export function TwoPointDiffDrawer({
     setSelectedFilePath(diff.files[0]!.path);
   }, [diff, focusLineTarget?.filePath, selectedFilePath]);
 
-  // Apply external focusLineTarget (scroll + flash-highlight + honest placeholder)
   useEffect(() => {
     if (!focusLineTarget || !diff) return;
     if (appliedFocusNonceRef.current === focusLineTarget.highlightNonce) return;
@@ -523,7 +514,6 @@ export function TwoPointDiffDrawer({
     );
   }, [selectedEntry]);
 
-  // Comments indexed by (side, lineNumber) for the currently selected file
   const commentsByAnchor = useMemo(() => {
     const map = new Map<string, CodeCommentDto[]>();
     if (!selectedEntry) return map;
@@ -540,7 +530,6 @@ export function TwoPointDiffDrawer({
     return map;
   }, [diffComments, selectedEntry]);
 
-  // Scroll & flash-highlight when lineFlashState activates for the rendered selectedEntry
   useEffect(() => {
     if (!lineFlashState || !selectedEntry) return;
     const matchesFile =
@@ -689,7 +678,6 @@ export function TwoPointDiffDrawer({
       </header>
 
       <div className="drawer-body">
-        {/* Explicit endpoint banner */}
         <section className="diff-endpoints-card">
           <div className="diff-endpoint-row">
             <span className="diff-role-pill diff-role-base">Base 旧端</span>
@@ -750,7 +738,6 @@ export function TwoPointDiffDrawer({
 
         {diff && (
           <>
-            {/* Status & summary metrics */}
             <section className="drawer-section">
               <div className="drawer-section-head">
                 <div className="drawer-badge-row">
@@ -795,7 +782,6 @@ export function TwoPointDiffDrawer({
                 </div>
               </div>
 
-              {/* Five-state honesty boundary callout */}
               {(diff.summary.hasInsufficientData ||
                 diff.summary.unsharedOrMissingFiles > 0 ||
                 diff.summary.unsupportedFiles > 0 ||
@@ -823,7 +809,6 @@ export function TwoPointDiffDrawer({
               </div>
             )}
 
-            {/* File list */}
             <section className="drawer-section">
               <div className="drawer-section-head">
                 <h3>文件树差异清单 ({diff.files.length})</h3>
@@ -918,7 +903,6 @@ export function TwoPointDiffDrawer({
               )}
             </section>
 
-            {/* Selected file detail / patch / honest boundary */}
             {selectedEntry && (
               <section className="drawer-section">
                 <div className="drawer-section-head">
@@ -978,7 +962,6 @@ export function TwoPointDiffDrawer({
                   </div>
                 ) : (
                   <>
-                    {/* Optional symbol enrichment chips */}
                     {selectedEntry.symbols.length > 0 && (
                       <div className="diff-symbols-bar" aria-label="代码符号变更辅助">
                         <span className="drawer-kv-label">符号变更辅助：</span>
@@ -1186,7 +1169,6 @@ export function TwoPointDiffDrawer({
               </section>
             )}
 
-            {/* Line-anchored Code Comments Panel */}
             <CodeCommentPanel
               spaceId={spaceId}
               projectId={projectId}

@@ -27,7 +27,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** REST controller exposing basic P2 user search, friend requests, and friend list endpoints. */
 @RestController
 public class FriendshipController {
     private static final String IDEMPOTENCY_HEADER = "Idempotency-Key";

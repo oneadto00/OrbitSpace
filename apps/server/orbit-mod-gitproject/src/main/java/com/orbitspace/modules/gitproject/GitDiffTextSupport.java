@@ -16,10 +16,6 @@ import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Pure text diffing, unified patch parsing/inversion/application, and bounded code excerpt
- * extraction for P2 controlled two-point diffs and line-anchored code comments.
- */
 final class GitDiffTextSupport {
     private static final int CONTEXT_LINES = 3;
     private static final int MAX_MYERS_LINES = 2000;
@@ -97,7 +93,6 @@ final class GitDiffTextSupport {
         return lines;
     }
 
-    /** Computes a standard unified diff for ADDED, DELETED, or MODIFIED text files. */
     static String unifiedDiff(String path, String oldText, String newText) {
         if (oldText == null && newText == null) {
             return null;
@@ -270,7 +265,6 @@ final class GitDiffTextSupport {
         return Optional.of(String.join("\n", out) + "\n");
     }
 
-    /** Produces the reversed unified diff (target -> base) for a parsed file patch. */
     static String invertPatch(ParsedPatchFile file) {
         if (file == null || file.binary()) {
             return null;

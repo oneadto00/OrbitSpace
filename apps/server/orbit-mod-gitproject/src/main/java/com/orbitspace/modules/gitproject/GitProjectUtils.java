@@ -37,7 +37,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
-/** Shared validation, RFC 8785 canonicalization, hashing, and JSON utilities for gitproject. */
 final class GitProjectUtils {
     static final long MAX_PATCH_BYTES = 8L * 1024 * 1024;
     static final long MAX_SAFE_INT = 9_007_199_254_740_991L;

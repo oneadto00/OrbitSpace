@@ -186,7 +186,6 @@ export function RemoteGitSettingsPanel({
     };
   }, [graph, sources]);
 
-  // Keep comparison dropdown defaults aligned with available sources / refs / local commits
   useEffect(() => {
     if (sources.length === 0) {
       setCompareSourceId("");
@@ -398,7 +397,6 @@ export function RemoteGitSettingsPanel({
         </div>
       )}
 
-      {/* Bind new trusted HTTPS remote repository */}
       <div className="remote-git-card">
         <h3>
           <Link2 size={15} /> 绑定受信任 HTTPS 远端仓库
@@ -466,7 +464,6 @@ export function RemoteGitSettingsPanel({
         )}
       </div>
 
-      {/* Bound sources list */}
       <div className="remote-git-card">
         <h3>
           <GitBranch size={15} /> 已绑定的远端来源 ({sources.length})
@@ -704,7 +701,6 @@ export function RemoteGitSettingsPanel({
         )}
       </div>
 
-      {/* Ahead / Behind comparison card */}
       <div className="remote-git-card">
         <h3>
           <GitCompareArrows size={15} /> 远端领先 / 落后与可达性对比
@@ -855,7 +851,6 @@ export function RemoteGitSettingsPanel({
         )}
       </div>
 
-      {/* Conflict observation list */}
       {allConflictCommits.length > 0 && (
         <div className="remote-git-card">
           <h3>

@@ -35,7 +35,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/** Service backing /internal/v1/jobs/** for worker claim, output staging, failure, and anti-revival result acceptance. */
 public class IntegrationJobResultService {
     private static final String JOB_IMAGE_THUMBNAIL = "IMAGE_THUMBNAIL";
     private static final String JOB_DIFF_ENRICHMENT = "DIFF_ENRICHMENT";

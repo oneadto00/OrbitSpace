@@ -22,7 +22,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.util.List;
 import java.util.function.Consumer;
 
-/** Spring Boot auto-configuration for orbit-mod-gitproject routes, services, SPIs, and replay. */
 @AutoConfiguration
 @Import({
     GitRemoteSourceService.class,

@@ -125,7 +125,6 @@ export function DagSvgCanvas({
   } | null>(null);
   const lastCenteredFocusRef = useRef<string | null>(null);
 
-  // Observe viewport size
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -168,7 +167,6 @@ export function DagSvgCanvas({
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
-  // Center canvas on focusTarget node when available
   const matchedFocusNode = useMemo(() => {
     if (!focusHighlight || !layout) return null;
     return (
@@ -198,7 +196,6 @@ export function DagSvgCanvas({
     return DAG_LEFT_MARGIN + lanes * DAG_LANE_WIDTH + 18;
   }, [layout?.laneCount]);
 
-  // Compute virtualized visible slices against world viewport bounds
   const { visibleNodes, visibleEdges, worldMinY, worldMaxY } = useMemo(() => {
     if (!layout || layout.nodes.length === 0) {
       return {
@@ -246,7 +243,6 @@ export function DagSvgCanvas({
     };
   }, [layout, pan.x, pan.y, pan.zoom, trackRight, viewport.height, viewport.width]);
 
-  // Measure real browser frame timing using requestAnimationFrame
   useEffect(() => {
     const start = performance.now();
     const rafId = window.requestAnimationFrame(() => {
@@ -435,7 +431,6 @@ export function DagSvgCanvas({
         aria-label="Git 提交与 WIP 拓扑图"
       >
         <g transform={`translate(${pan.x}, ${pan.y}) scale(${pan.zoom})`}>
-          {/* Vertical lane guide hairlines */}
           {layout &&
             Array.from({ length: layout.laneCount }, (_, laneIdx) => {
               const lx = DAG_LEFT_MARGIN + laneIdx * DAG_LANE_WIDTH;
@@ -453,7 +448,6 @@ export function DagSvgCanvas({
               );
             })}
 
-          {/* Virtualized visible edges */}
           <g className="git-dag-edges">
             {visibleEdges.map((edge) => {
               const pathD = buildEdgePath(edge);
@@ -504,7 +498,6 @@ export function DagSvgCanvas({
             })}
           </g>
 
-          {/* Virtualized visible nodes */}
           <g className="git-dag-nodes">
             {visibleNodes.map((node) => {
               const isCommit = node.kind === "COMMIT";
@@ -551,7 +544,6 @@ export function DagSvgCanvas({
                     ? "#0f766e"
                     : laneColor(node.lane);
 
-              // Compose dual-channel text badges cleanly without overlap
               const badges: Array<{ text: string; bg: string; fg: string; border: string; mono?: boolean }> = [];
 
               if (isCompareBase) {
@@ -712,7 +704,6 @@ export function DagSvgCanvas({
                   onClick={isInteractive ? () => activateNode(node) : undefined}
                   onKeyDown={isInteractive ? (e) => handleNodeKeyDown(e, node) : undefined}
                 >
-                  {/* Row background selection / focus / two-point compare highlight */}
                   {(isSelected || isFocused || isCompareBase || isCompareTarget) && (
                     <rect
                       key={isFocused && focusHighlight ? `row-${node.id}-${focusHighlight.nonce}` : `row-${node.id}`}
@@ -756,7 +747,6 @@ export function DagSvgCanvas({
                     />
                   )}
 
-                  {/* Subtle horizontal guide connecting lane marker to text column */}
                   {trackRight - node.x > 16 && (
                     <line
                       x1={node.x + 10}
@@ -769,7 +759,6 @@ export function DagSvgCanvas({
                     />
                   )}
 
-                  {/* Focus target pulse ring keyed by highlightNonce */}
                   {isFocused && focusHighlight && (
                     <circle
                       key={`pulse-${node.id}-${focusHighlight.nonce}`}
@@ -783,7 +772,6 @@ export function DagSvgCanvas({
                     />
                   )}
 
-                  {/* Node glyph */}
                   {isCommit && (
                     <>
                       {node.trustState === "CONFLICT" && (
@@ -863,7 +851,6 @@ export function DagSvgCanvas({
                     />
                   )}
 
-                  {/* Dual-channel badge row */}
                   {badgeLayouts.map((badge, idx) => (
                     <g key={`${node.id}-b-${idx}`} transform={`translate(${badge.bx}, ${node.y - 19})`}>
                       <rect
@@ -893,7 +880,6 @@ export function DagSvgCanvas({
                     </g>
                   ))}
 
-                  {/* Secondary descriptive line */}
                   <text
                     x={trackRight}
                     y={node.y + 17}

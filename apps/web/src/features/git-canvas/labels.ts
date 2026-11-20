@@ -157,7 +157,6 @@ export const CODE_COMMENT_SIDE_LABELS: Record<CodeCommentSide, string> = {
   NEW: "新侧 (NEW / Target)",
 };
 
-/** Returns true only when the manifest status carries positive presence or absence evidence. */
 export function isEvidenceSufficient(status: ContentManifestStatus): boolean {
   return status === "AVAILABLE" || status === "ABSENT_CONFIRMED";
 }
@@ -191,7 +190,6 @@ export function resolveEffectiveComparisonState(
   return entry.comparisonState;
 }
 
-/** Returns true only when both endpoints have sufficient evidence and deterministic diff output. */
 export function isEntryComparable(entry: TwoPointDiffFileEntry): boolean {
   const effective = resolveEffectiveComparisonState(entry);
   return (

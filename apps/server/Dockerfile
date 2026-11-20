@@ -12,7 +12,6 @@ COPY orbit-mod-friendship orbit-mod-friendship
 COPY orbit-mod-file orbit-mod-file
 COPY orbit-mod-integration orbit-mod-integration
 COPY orbit-mod-document orbit-mod-document
-# The reactor builds the document module before packaging it into orbit-app.
 COPY orbit-app orbit-app
 RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp clean package -DskipTests
 

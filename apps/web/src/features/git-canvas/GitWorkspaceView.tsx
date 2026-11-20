@@ -155,7 +155,6 @@ export function GitWorkspaceView({
     null,
   );
 
-  // P2 two-point diff & code comment state
   const [compareMode, setCompareMode] = useState(false);
   const [compareBase, setCompareBase] = useState<DiffEndpointRef | null>(null);
   const [compareTarget, setCompareTarget] = useState<DiffEndpointRef | null>(null);
@@ -172,14 +171,12 @@ export function GitWorkspaceView({
     | null
   >(null);
 
-  // Filter controls
   const [queryText, setQueryText] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
   const [authorFilter, setAuthorFilter] = useState("");
   const [onlyConflicts, setOnlyConflicts] = useState(false);
   const [onlyWip, setOnlyWip] = useState(false);
 
-  // Worker layout state
   const workerRef = useRef<Worker | null>(null);
   const latestWorkerReqIdRef = useRef(0);
   const previousLanesRef = useRef<Record<string, number>>({});
@@ -188,7 +185,6 @@ export function GitWorkspaceView({
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const lastAppliedCommentNonceRef = useRef<number | null>(null);
 
-  // Reset per-project / per-epoch state cleanly
   useEffect(() => {
     setExtraPages([]);
     setLoadMoreError(null);
@@ -313,7 +309,6 @@ export function GitWorkspaceView({
     setOnlyWip(false);
   }, []);
 
-  // Derive branch options from loaded graph
   const branchOptions = useMemo(() => {
     if (!mergedGraph) return [];
     const set = new Set<string>();
@@ -405,7 +400,6 @@ export function GitWorkspaceView({
     return () => unbind();
   }, [access?.spaceId, access?.membershipEpoch, isRevoked]);
 
-  // Dispatch layout computation whenever graph or filter changes
   useEffect(() => {
     if (!mergedGraph || isRevoked) return;
     const reqId = ++latestWorkerReqIdRef.current;
@@ -429,7 +423,6 @@ export function GitWorkspaceView({
     }
   }, [filterOptions, isRevoked, mergedGraph]);
 
-  // Handle focusTarget from chat quotes or deep links
   const lastAppliedFocusNonceRef = useRef<number | null>(null);
   useEffect(() => {
     if (!focusTarget) return;
@@ -451,7 +444,6 @@ export function GitWorkspaceView({
     }
   }, [clearFilters, focusTarget, hasActiveFilter, mergedGraph]);
 
-  // Handle external commentFocusTarget (from CODE_COMMENT_REF cards or deep links)
   useEffect(() => {
     if (!commentFocusTarget || !access || isRevoked) return;
     if (lastAppliedCommentNonceRef.current === commentFocusTarget.highlightNonce) return;
@@ -700,7 +692,6 @@ export function GitWorkspaceView({
     await queryClient.invalidateQueries({ queryKey: graphQueryKey });
   }, [access, graphQueryKey, queryClient]);
 
-  // Guard states before rendering workspace
   if (!access) {
     if (spacesQuery.isPending) {
       return (

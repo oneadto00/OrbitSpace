@@ -6,7 +6,6 @@ import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
 
-/** Immutable DTOs and request models for the P2 basic friendship domain. */
 public final class FriendshipDtos {
     private FriendshipDtos() {}
 

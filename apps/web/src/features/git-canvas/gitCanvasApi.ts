@@ -33,7 +33,6 @@ export interface RawPatchPayload {
   text: string;
 }
 
-/** Generates a fresh UUID idempotency key with fallback for constrained runtimes. */
 export function makeIdempotencyKey(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -49,7 +48,6 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
       return true;
     }
   } catch {
-    // Fallback below
   }
   try {
     const textarea = document.createElement("textarea");

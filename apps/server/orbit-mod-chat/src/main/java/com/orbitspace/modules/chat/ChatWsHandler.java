@@ -33,7 +33,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** WebSocket room handler for PING/PONG, post-commit SEND_MSG/MSG_ACK, and Redis room fan-out. */
 public class ChatWsHandler extends TextWebSocketHandler implements MessageListener {
     private static final Logger LOG = LoggerFactory.getLogger(ChatWsHandler.class);
 
@@ -274,7 +273,6 @@ public class ChatWsHandler extends TextWebSocketHandler implements MessageListen
                     session.close(CloseStatus.POLICY_VIOLATION);
                 }
             } catch (IOException ignored) {
-                // Already disconnected.
             }
         }
     }

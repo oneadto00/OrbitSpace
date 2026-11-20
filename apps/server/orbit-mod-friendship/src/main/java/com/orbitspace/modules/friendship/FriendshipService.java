@@ -34,7 +34,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/** Core transactional service for basic P2 friend requests, friend list, and FriendshipQueryPort. */
 public class FriendshipService implements FriendshipQueryPort {
     private static final int DEFAULT_SEARCH_LIMIT = 10;
     private static final int MAX_SEARCH_LIMIT = 50;

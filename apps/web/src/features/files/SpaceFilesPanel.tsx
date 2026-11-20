@@ -239,7 +239,6 @@ export function SpaceFilesPanel({
         </div>
       </div>
 
-      {/* Space Quota Bar */}
       <div className="files-quota-card">
         <div className="files-quota-row">
           <span className="files-quota-label">
@@ -264,7 +263,6 @@ export function SpaceFilesPanel({
         </div>
       </div>
 
-      {/* Chunked Upload Widget */}
       {canWrite ? (
         <div
           className={`files-upload-box ${isDragOver ? "is-dragover" : ""}`}
@@ -450,7 +448,6 @@ export function SpaceFilesPanel({
         </div>
       )}
 
-      {/* Space File List */}
       {filesQuery.isPending && <Loading label="正在加载空间文件列表…" />}
 
       {filesQuery.isError && (

@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** Persists and queries Git commit observations, ordered parents, conflict states, and refs. */
 class GitDagObservationStore {
     private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {};
 

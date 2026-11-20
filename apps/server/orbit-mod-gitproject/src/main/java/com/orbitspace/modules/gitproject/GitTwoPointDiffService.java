@@ -695,7 +695,6 @@ public class GitTwoPointDiffService {
                     "目标 WIP 缺少该路径内容（MISSING），请执行 orbit backfill 受控补传，绝不视为删除。");
         }
 
-        // If both sides were explicitly backfilled, compare exact full texts directly.
         if (baseBackfill != null && targetBackfill != null) {
             return null;
         }
@@ -943,7 +942,6 @@ public class GitTwoPointDiffService {
                     "提交端点尚未补传该路径的受控文件内容（请运行 orbit backfill）。");
         }
 
-        // WIP endpoint
         if (manifestStatus == ContentManifestStatus.UNSUPPORTED
                 || (patchFile != null && patchFile.binary())) {
             return new ResolvedSide(
@@ -1089,7 +1087,6 @@ public class GitTwoPointDiffService {
                     List.of());
         }
 
-        // Both AVAILABLE
         String patchText = GitDiffTextSupport.unifiedDiff(path, baseSide.text(), targetSide.text());
         if (patchText == null) {
             return new TwoPointDiffFileEntry(

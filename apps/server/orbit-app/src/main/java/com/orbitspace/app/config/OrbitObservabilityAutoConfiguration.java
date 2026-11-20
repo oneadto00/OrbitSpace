@@ -45,11 +45,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Configures full-stack Actuator observability metrics and non-sensitive telemetry summaries for
- * chat persistence/delivery, sync failures, outbox backlog, document save ACK latency, async
- * worker queue wait/processing time, quota rejections, storage growth, and revocation propagation.
- */
 @AutoConfiguration(afterName = {
     "com.orbitspace.platform.PlatformAutoConfiguration",
     "com.orbitspace.modules.integration.IntegrationAutoConfiguration",
@@ -270,10 +265,6 @@ public class OrbitObservabilityAutoConfiguration {
         }
     }
 
-    /**
-     * Periodically refreshes aggregate database and Redis gauges and logs non-sensitive runtime
-     * health summaries.
-     */
     public static final class OrbitTelemetryCollector {
         private static final Logger log = LoggerFactory.getLogger(OrbitTelemetryCollector.class);
         private static final String JOB_STREAM = "orbit:async:jobs";

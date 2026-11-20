@@ -856,7 +856,6 @@
   gap: 6px;
 }
 
-/* TwoPointDiffDrawer */
 .diff-kind-pill {
   color: #1e40af;
 }
@@ -1241,7 +1240,6 @@
   box-shadow: inset 3px 0 #eab308;
 }
 
-/* Code Comment Panel */
 .code-comment-panel {
   display: flex;
   flex-direction: column;

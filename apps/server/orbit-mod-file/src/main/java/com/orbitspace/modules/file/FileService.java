@@ -65,7 +65,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/** Core domain service for chunked uploads, user-scoped dedup, space files, airdrops, and downloads. */
 public class FileService
         implements FileQuotaAndGrantPort, MembershipRevocationHook, ResourceCardVerifierPort {
     private static final long DEFAULT_PART_SIZE_BYTES = 5L * 1024 * 1024;

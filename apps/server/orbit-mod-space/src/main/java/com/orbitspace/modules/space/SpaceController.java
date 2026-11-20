@@ -34,7 +34,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** REST controller implementing the 12 OpenAPI space and invitation endpoints. */
 @RestController
 public class SpaceController {
     private static final String EPOCH_HEADER = "X-Membership-Epoch";

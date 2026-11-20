@@ -8,7 +8,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-/** Filename sanitization, MIME normalization, and magic-byte sniffing against MIME spoofing. */
 final class FileSecuritySupport {
     private static final Set<String> SAFE_THUMBNAIL_MIMES =
             Set.of("image/png", "image/jpeg", "image/webp", "image/gif");

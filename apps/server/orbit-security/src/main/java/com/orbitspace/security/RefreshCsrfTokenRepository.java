@@ -52,7 +52,6 @@ public final class RefreshCsrfTokenRepository implements CsrfTokenRepository {
 
     @Override
     public void saveToken(CsrfToken token, HttpServletRequest request, HttpServletResponse response) {
-        // Derived from the refresh cookie; no session storage.
     }
 
     private static CsrfToken token(String value) {

@@ -147,7 +147,6 @@ export function AirdropPage() {
     return map;
   }, [friends]);
 
-  // Apply recipientId from URL when coming from FriendsPage
   useEffect(() => {
     if (!initialRecipientId) return;
     if (friends.some((f) => f.userId === initialRecipientId)) {
@@ -157,7 +156,6 @@ export function AirdropPage() {
     }
   }, [friends, initialRecipientId]);
 
-  // Auto-inspect deep-linked shareId (e.g. opened from a chat FILE_REF card)
   useEffect(() => {
     if (!inspectedShareIdParam) {
       setInspectedShare(null);
@@ -416,7 +414,6 @@ export function AirdropPage() {
         </div>
       </header>
 
-      {/* Mandatory Product Policy Banners */}
       <div className="airdrop-policies">
         <div className="files-policy-box" role="note">
           <Info size={16} />
@@ -464,7 +461,6 @@ export function AirdropPage() {
         </div>
       )}
 
-      {/* Inspected / Deep-linked Share Panel */}
       {(inspectLoading || inspectError || inspectedShare) && (
         <section className="surface airdrop-inspect-card" aria-label="空投详情检查">
           <div className="section-head">
@@ -572,7 +568,6 @@ export function AirdropPage() {
       )}
 
       <div className="airdrop-layout">
-        {/* Left Column: Create Independent Airdrop */}
         <section className="surface" aria-label="发起新空投">
           <div className="section-head">
             <h2>发起新空投</h2>
@@ -580,7 +575,6 @@ export function AirdropPage() {
           </div>
 
           <form className="airdrop-form-stack" onSubmit={handleCreateSubmit}>
-            {/* Step 1: Upload Files via Chunked Worker */}
             <div className="airdrop-step-block">
               <div className="section-head" style={{ marginBottom: 0 }}>
                 <span className="airdrop-step-label">1. 上传待空投文件（单/多文件）</span>
@@ -722,7 +716,6 @@ export function AirdropPage() {
               )}
             </div>
 
-            {/* Step 2: Select 1+ Active Friends */}
             <div className="airdrop-step-block">
               <span className="airdrop-step-label">
                 2. 选择接收好友（已选 {selectedRecipientIds.length} 位）
@@ -760,7 +753,6 @@ export function AirdropPage() {
               )}
             </div>
 
-            {/* Step 3: Expiry Preset, Download Limit & Note */}
             <div className="airdrop-step-block">
               <span className="airdrop-step-label">3. 有效期与下载次数限制</span>
 
@@ -856,7 +848,6 @@ export function AirdropPage() {
           </form>
         </section>
 
-        {/* Right Column: Sent & Received Airdrops */}
         <section className="surface" aria-label="空投记录列表">
           <div className="airdrop-tabs" role="tablist" aria-label="空投分类">
             <button

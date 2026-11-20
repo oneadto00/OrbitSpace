@@ -44,7 +44,6 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 import java.io.IOException;
 import java.io.InputStream;
 
-/** REST controller exposing chunked upload, space files, independent airdrops, and Range proxy downloads. */
 @RestController
 public class FileController {
     private static final String EPOCH_HEADER = "X-Membership-Epoch";

@@ -601,7 +601,6 @@ export function NodeDetailDrawer({
                     </div>
                   )}
 
-                  {/* Parent selector for merge commits */}
                   <div className="drawer-parent-box">
                     {orderedParents.length === 0 ? (
                       <p className="drawer-hint">根提交（比较基准：EMPTY_TREE 空树）。</p>
@@ -752,7 +751,6 @@ export function NodeDetailDrawer({
                   </div>
                 </section>
 
-                {/* Strictly separated captureState vs parseState */}
                 <section className="drawer-section">
                   <h3>采集状态与内容解析状态</h3>
                   <div className="drawer-state-split">
@@ -825,7 +823,6 @@ export function NodeDetailDrawer({
                   )}
                 </section>
 
-                {/* Auxiliary stagingSummary */}
                 <section className="drawer-section">
                   <h3>暂存区辅助摘要 (Staging Summary)</h3>
                   <p className="drawer-hint">

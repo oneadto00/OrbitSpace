@@ -332,7 +332,6 @@ export function FriendsPage() {
 
       <div className="friends-layout">
         <div className="friends-stack">
-          {/* Active Friends List */}
           <section className="surface" aria-label="好友列表">
             <div className="section-head">
               <h2>
@@ -429,7 +428,6 @@ export function FriendsPage() {
             )}
           </section>
 
-          {/* Incoming & Outgoing Friend Requests */}
           <section className="surface" aria-label="好友申请管理">
             <div className="section-head">
               <h2>好友申请</h2>
@@ -551,7 +549,6 @@ export function FriendsPage() {
           </section>
         </div>
 
-        {/* User Search & Add Friend */}
         <section className="surface" aria-label="搜索用户并添加好友">
           <div className="section-head">
             <h2>搜索用户</h2>

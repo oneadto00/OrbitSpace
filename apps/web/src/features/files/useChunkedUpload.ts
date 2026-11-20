@@ -240,7 +240,6 @@ export function useChunkedUpload({
     [ensureWorker],
   );
 
-  // Abort all active tasks and terminate worker on unmount or space revocation
   useEffect(() => {
     mountedRef.current = true;
     const unbind =
@@ -298,7 +297,7 @@ export function useChunkedUpload({
       }
 
       try {
-        // Step 1: Web Worker incremental SHA-256 hashing (cached across pause/resume/retry)
+        // Cache the worker hash across pause, resume, and retry.
         if (!runtime.fileSha256 || !runtime.partSha256s) {
           updateTask(localId, (prev) => ({
             ...prev,
@@ -334,7 +333,6 @@ export function useChunkedUpload({
           throw new Error("未计算出有效文件校验和。");
         }
 
-        // Step 2: Create quota-checked upload session or query existing session for resume
         updateTask(localId, (prev) => ({
           ...prev,
           phase: "creating_session",
@@ -406,7 +404,7 @@ export function useChunkedUpload({
               : 0,
         }));
 
-        // Step 3: User-scoped instant-match fast completion (strictly files already owned/authorized by actor)
+        // Reuse only an existing file the uploader is already authorized to access.
         let completedRecord: FileRecordDto | null = null;
         let usedInstantMatch = false;
 
@@ -447,7 +445,6 @@ export function useChunkedUpload({
           }
         }
 
-        // Step 4: Concurrent upload of missing parts with per-part SHA-256 verification and network retry
         if (!completedRecord && effectiveSession.status !== "COMPLETED") {
           const uploadedSet = new Set<number>(effectiveSession.uploadedParts);
           const missingParts: number[] = [];
@@ -535,7 +532,6 @@ export function useChunkedUpload({
             return;
           }
 
-          // Step 5: Idempotent complete & merge verification
           updateTask(localId, (prev) => ({
             ...prev,
             phase: "completing",
@@ -575,7 +571,6 @@ export function useChunkedUpload({
           throw new Error("上传合并未能返回有效文件记录。");
         }
 
-        // Confirm attachment to space file area for SPACE_FILE uploads
         const finalRecord: FileRecordDto =
           targetScope === "SPACE_FILE" && currentSpaceId && currentAccess
             ? await attachSpaceFile(

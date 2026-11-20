@@ -88,7 +88,6 @@ export const AI_SOURCE_KIND_META: Record<
   },
 };
 
-/** Generate a fresh UUID idempotency key with fallback for older runtimes. */
 export function makeIdempotencyKey(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -112,7 +111,6 @@ export function jsonRequest(
   };
 }
 
-/** Format ISO timestamps consistently across Space and Chat views. */
 export function formatDateTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -130,7 +128,6 @@ export async function copyToClipboard(text: string): Promise<boolean> {
       return true;
     }
   } catch {
-    // Fallback below
   }
   try {
     const textarea = document.createElement("textarea");
@@ -147,7 +144,6 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
-/** Format an Error or structured WS ApiError into a safe user-facing Chinese message. */
 export function featureErrorText(
   error: unknown,
   overrides?: Partial<Record<ErrorCode, string>>,
@@ -158,7 +154,6 @@ export function featureErrorText(
   return errorText(error);
 }
 
-/** Convert a structured WebSocket ApiError payload into a safe message via HttpError mapping. */
 export function apiPayloadErrorText(
   payload: ApiError,
   overrides?: Partial<Record<ErrorCode, string>>,

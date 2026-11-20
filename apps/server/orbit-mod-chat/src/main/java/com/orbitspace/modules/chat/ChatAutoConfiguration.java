@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-/** Spring Boot auto-configuration registering chat routes, WebSocket endpoint, and Redis fan-out. */
 @AutoConfiguration
 @EnableWebSocket
 @Import({ChatService.class, ChatController.class, ChatWsHandler.class})

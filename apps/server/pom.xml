@@ -37,7 +37,6 @@
         <jjwt.version>0.13.0</jjwt.version>
     </properties>
 
-    <!-- The Boot parent manages Spring starters, Flyway and Connector/J. -->
     <dependencyManagement>
         <dependencies>
             <dependency>

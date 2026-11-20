@@ -48,10 +48,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
-/**
- * Domain service for P2 line-anchored code comments, unified chat discussion thread binding, and
- * cascading WIP snapshot expiration/force-purge lifecycle invalidation.
- */
 public class GitCodeCommentService implements ResourceLifecycleHook {
     private static final String CHAT_THREAD_REPLY_BEAN = "orbitChatThreadReply";
     private static final TypeReference<List<TwoPointDiffFileEntry>> FILE_LIST_TYPE =
@@ -775,7 +771,6 @@ public class GitCodeCommentService implements ResourceLifecycleHook {
             String spaceId, String projectId, String snapshotId, ResourceLifecycleState targetState) {
         tx.executeWithoutResult(
                 status -> {
-                    // 1. Expire any open backfill sessions and detach WIP backfill storage references.
                     db.update(
                             """
                             UPDATE git_backfill_sessions
@@ -804,7 +799,6 @@ public class GitCodeCommentService implements ResourceLifecycleHook {
                                 Long.toString(backfillObjId));
                     }
 
-                    // 2. Cascade to two_point_diffs referencing this WIP snapshot.
                     String stateGuard =
                             targetState == ResourceLifecycleState.FORCE_PURGED
                                     ? "lifecycle_state <> 'FORCE_PURGED'"
@@ -864,7 +858,6 @@ public class GitCodeCommentService implements ResourceLifecycleHook {
                         }
                     }
 
-                    // 3. Cascade to code_comments: redact excerpt, advance lifecycle_version, notify hooks.
                     List<AffectedCommentRow> affectedComments =
                             db.query(
                                     """

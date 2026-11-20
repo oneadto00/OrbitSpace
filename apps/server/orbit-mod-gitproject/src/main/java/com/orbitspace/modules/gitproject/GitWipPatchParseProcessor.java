@@ -19,7 +19,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Async processor for GIT_WIP_PATCH_PARSE jobs producing immutable patch parse summaries. */
 public class GitWipPatchParseProcessor implements AsyncJobProcessor {
     public static final String JOB_TYPE = "GIT_WIP_PATCH_PARSE";
 

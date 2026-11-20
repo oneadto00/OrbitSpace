@@ -36,7 +36,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** REST controller implementing the 8 OpenAPI main-room chat endpoints. */
 @RestController
 public class ChatController {
     private static final String EPOCH_HEADER = "X-Membership-Epoch";

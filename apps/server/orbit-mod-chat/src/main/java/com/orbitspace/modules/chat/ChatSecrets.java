@@ -11,7 +11,6 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.UUID;
 
-/** Identifier, digest, and JSON helpers scoped to the chat module. */
 final class ChatSecrets {
     private ChatSecrets() {}
 

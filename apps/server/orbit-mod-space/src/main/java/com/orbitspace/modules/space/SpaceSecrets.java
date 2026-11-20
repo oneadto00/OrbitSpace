@@ -13,7 +13,6 @@ import java.util.Base64;
 import java.util.HexFormat;
 import java.util.UUID;
 
-/** Cryptographic and identifier utilities scoped to the space module. */
 final class SpaceSecrets {
     private static final SecureRandom RANDOM = new SecureRandom();
 

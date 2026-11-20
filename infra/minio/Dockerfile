@@ -1,5 +1,4 @@
 # syntax=docker/dockerfile:1
-# Build the server and bucket initializer from checksum-pinned upstream releases.
 FROM golang:1.24.8-alpine AS compiler
 WORKDIR /src
 ENV CGO_ENABLED=0

@@ -249,7 +249,6 @@ export function SpaceWorkbenchPage() {
     });
   }, []);
 
-  // Reset per-space / per-epoch UI state
   useEffect(() => {
     setCenterMode(parseCenterMode(queryTab));
     setGitSubMode("canvas");
@@ -272,7 +271,6 @@ export function SpaceWorkbenchPage() {
     appliedDeepLinkRef.current = null;
   }, [spaceId, access?.membershipEpoch, queryTab]);
 
-  // Cleanup timers and pending lookups on unmount
   useEffect(() => {
     return () => {
       if (forwardNoticeTimerRef.current !== null) {
@@ -288,7 +286,6 @@ export function SpaceWorkbenchPage() {
     };
   }, []);
 
-  // Bind to instant space revocation
   useEffect(() => {
     if (!access || isRevoked) return;
     return bindSpaceConnection(access, () => {
@@ -402,7 +399,6 @@ export function SpaceWorkbenchPage() {
     }
   }, [currentSpace, spaceDetailQuery.data?.space]);
 
-  // Apply deep-links and default selections across Git projects, Docs, and PDFs
   useEffect(() => {
     if (!spaceDetailQuery.isSuccess) return;
     const deepLinkKey = [
@@ -481,7 +477,6 @@ export function SpaceWorkbenchPage() {
     spaceId,
   ]);
 
-  // Keep default activeDocumentId synced with available documents
   useEffect(() => {
     if (!documentsQuery.isSuccess) return;
     if (documents.length === 0) {
@@ -493,7 +488,6 @@ export function SpaceWorkbenchPage() {
     }
   }, [activeDocumentId, documents, documentsQuery.isSuccess]);
 
-  // Keep default activePdf synced with space PDF files
   useEffect(() => {
     if (!spaceFilesQuery.isSuccess) return;
     if (pdfFiles.length === 0) {
@@ -515,7 +509,6 @@ export function SpaceWorkbenchPage() {
     }
   }, [activePdf, pdfCommentId, pdfFiles, spaceFilesQuery.isSuccess]);
 
-  // Manage settings modal dialog open/close
   useEffect(() => {
     const dialog = settingsDialogRef.current;
     if (!dialog) return;
@@ -974,7 +967,6 @@ export function SpaceWorkbenchPage() {
     spaceId,
   ]);
 
-  // Active resource descriptor passed to the SINGLE Space Main Chat for one-click filtering
   const activeResource: ChatActiveResource | null = useMemo(() => {
     if (centerMode === "git" && activeProject) {
       return { kind: "PROJECT", id: activeProject.projectId, label: activeProject.name };
@@ -1159,7 +1151,6 @@ export function SpaceWorkbenchPage() {
       )}
 
       <div className="workbench-3pane">
-        {/* Left Pane: Full P3 Space Navigation (Git / Collaborative Docs / PDF Reader / Space Files) */}
         <aside className="workbench-left-rail" aria-label="空间资源导航">
           <div className="rail-mode-switcher rail-mode-grid-4" role="tablist" aria-label="工作区视图切换">
             <button
@@ -1598,7 +1589,6 @@ export function SpaceWorkbenchPage() {
           </div>
         </aside>
 
-        {/* Center Pane: Git Canvas / Remote Git Settings / Collaborative Docs / Read-Only PDF Reader / Space Files */}
         <section
           className="workbench-center-pane"
           aria-label={
@@ -1813,7 +1803,7 @@ export function SpaceWorkbenchPage() {
             ))}
         </section>
 
-        {/* Right Pane: Single Space Main Chat Hub (Invariant across all left-rail views) */}
+        {/* Keep the space chat mounted when the active view changes. */}
         <ChatPane
           spaceId={spaceId}
           spaceRole={resolvedSpace.role}
@@ -1838,7 +1828,6 @@ export function SpaceWorkbenchPage() {
         />
       </div>
 
-      {/* Collapsible Space Settings / AI Policy / Members / Invites Modal */}
       <dialog
         ref={settingsDialogRef}
         className="workbench-settings-dialog"

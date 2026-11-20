@@ -401,7 +401,6 @@ export function computeDagLayout(
     return EMPTY_TREE_NODE_ID;
   };
 
-  // Register commits
   const sortedCommits = [...commitMap.values()].sort((a, b) => a.oid.localeCompare(b.oid));
   for (const commit of sortedCommits) {
     const primary = selectPrimaryObservation(commit.observations);
@@ -528,7 +527,7 @@ export function computeDagLayout(
     outgoingEdges.set(id, edges);
   }
 
-  // Step 2: Topological sort (parents -> children) with defensive cycle breaking
+  // Sort parents before children and break cycles deterministically.
   const allIds = [...nodeMap.keys()];
   const childrenOf = new Map<string, string[]>();
   const inDegree = new Map<string, number>();
@@ -586,7 +585,6 @@ export function computeDagLayout(
       }
       if (!candidate) break;
       current = candidate;
-      // Mark all remaining unvisited parent edges into `current` as broken back-edges
       for (const edge of outgoingEdges.get(current.id) ?? []) {
         if (!visited.has(edge.toId)) {
           brokenEdgeKeys.add(`${edge.fromId}->${edge.toId}`);
@@ -612,7 +610,6 @@ export function computeDagLayout(
   const topoOrderMap = new Map<string, number>();
   topoList.forEach((node, idx) => topoOrderMap.set(node.id, idx));
 
-  // Build cycle-free parent/child adjacency for visual ordering and filtering
   const dagParents = new Map<string, InternalEdge[]>();
   const dagChildren = new Map<string, string[]>();
   for (const id of allIds) {
@@ -628,7 +625,6 @@ export function computeDagLayout(
     }
   }
 
-  // Step 3: Reverse topological ordering (children -> parents) for visual rows
   const outDegree = new Map<string, number>();
   const visualReady = new MinHeap<InternalNode>((a, b) => compareVisualReady(a, b, topoOrderMap));
   for (const id of allIds) {
@@ -655,7 +651,7 @@ export function computeDagLayout(
     }
   }
 
-  // Step 4: Filtering & honest OMITTED_LINK computation
+  // Preserve ancestry through hidden nodes using OMITTED_LINK edges.
   const query = options?.query?.trim().toLowerCase() ?? "";
   const branch = options?.branch?.trim() ?? "";
   const author = options?.author?.trim().toLowerCase() ?? "";
@@ -868,13 +864,11 @@ export function computeDagLayout(
     (node) => keptPrimaryIds.has(node.id) || keptBoundaryIds.has(node.id),
   );
 
-  // Assign dense visual rows
   const keptRowById = new Map<string, number>();
   keptVisualNodes.forEach((node, rowIdx) => {
     keptRowById.set(node.id, rowIdx);
   });
 
-  // Group kept outgoing edges by source node, mainline first
   const keptOutgoingByFrom = new Map<string, FilteredEdge[]>();
   for (const node of keptVisualNodes) keptOutgoingByFrom.set(node.id, []);
   for (const edge of filteredEdges) {
@@ -905,7 +899,7 @@ export function computeDagLayout(
     });
   }
 
-  // Step 5: Deterministic lane assignment with mainline preference & previousLanes stability
+  // Prefer mainline and previous lane assignments to keep the layout stable.
   const activeLaneTarget: Array<string | null> = [];
   const laneById = new Map<string, number>();
 
@@ -957,7 +951,6 @@ export function computeDagLayout(
       for (let i = 0; i < preferredMin && i < activeLaneTarget.length; i++) {
         if (activeLaneTarget[i] === null && !hasAnyUnplacedClaimant(i)) return i;
       }
-      // Allocate a fresh lane beyond all previously claimed lanes if needed
       let nextIdx = activeLaneTarget.length;
       while (hasAnyUnplacedClaimant(nextIdx)) {
         activeLaneTarget.push(null);
@@ -1035,7 +1028,6 @@ export function computeDagLayout(
     laneById.set(node.id, chosenLane);
     advanceClaimHeads(currentRow);
 
-    // Reserve lanes for outgoing edges
     const outEdges = keptOutgoingByFrom.get(node.id) ?? [];
     outEdges.forEach((edge, idx) => {
       const targetId = edge.toId;
@@ -1082,7 +1074,6 @@ export function computeDagLayout(
     });
   });
 
-  // Step 6: Materialize LayoutNodes & LayoutEdges
   let maxLane = 0;
   let visibleCommitCount = 0;
   let visibleWipCount = 0;

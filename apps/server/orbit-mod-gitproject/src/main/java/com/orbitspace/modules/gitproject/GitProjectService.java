@@ -66,7 +66,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Domain service for Git projects, DAG observations, WIP monotonic capture protocol, and lifecycle. */
 public class GitProjectService {
     private static final Duration REPORT_SESSION_TTL = Duration.ofMinutes(15);
 
@@ -1102,7 +1101,6 @@ public class GitProjectService {
                 ts);
     }
 
-    /** Expires unreferenced ACTIVE WIP snapshots created at or before cutoff. */
     public int expireUnreferencedSnapshots(Instant cutoff, int limit) {
         int bounded = Math.min(Math.max(limit, 1), 500);
         List<String> candidates =
@@ -1129,7 +1127,6 @@ public class GitProjectService {
         return expired;
     }
 
-    /** Immediately expires a specific unreferenced ACTIVE WIP snapshot. */
     @Transactional
     public boolean expireSnapshot(String snapshotId) {
         return expireSnapshotLocked(snapshotId, null);

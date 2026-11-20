@@ -367,7 +367,6 @@ export function ChatPane({
   const wasAtBottomRef = useRef(true);
   const initialScrolledRef = useRef(false);
 
-  // Reset composer UI state when space or membership epoch changes
   useEffect(() => {
     setComposerText("");
     setReplyTargetId(null);
@@ -391,7 +390,6 @@ export function ChatPane({
     }
   }, [externalSyncNonce, syncNow]);
 
-  // Focus composer when user quotes a commit/WIP/file
   useEffect(() => {
     if (activeDraftQuote) {
       composerInputRef.current?.focus();

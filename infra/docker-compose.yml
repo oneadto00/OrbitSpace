@@ -170,7 +170,6 @@ services:
 
   collab-hocuspocus:
     profiles: [p3]
-    # Step 12 supplies the authenticated service and its Dockerfile.
     build:
       context: ..
       dockerfile: services/collab-hocuspocus/Dockerfile

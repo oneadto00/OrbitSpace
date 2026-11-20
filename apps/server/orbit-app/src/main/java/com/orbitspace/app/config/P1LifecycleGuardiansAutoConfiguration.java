@@ -103,7 +103,6 @@ public class P1LifecycleGuardiansAutoConfiguration {
                 objectGrace);
     }
 
-    /** Scheduled P1 background guardians for WIP staleness, WIP expiration, and storage GC audits. */
     public static class P1LifecycleGuardians {
         private static final Logger log = LoggerFactory.getLogger(P1LifecycleGuardians.class);
         private static final int EXPIRE_BATCH_LIMIT = 500;
@@ -144,7 +143,6 @@ public class P1LifecycleGuardiansAutoConfiguration {
             this.objectGrace = requirePositiveDuration(objectGrace, "Object GC grace");
         }
 
-        /** Marks unrefreshed ACTIVE worktree WIP snapshots past {@code stale_after_seconds} as STALE. */
         @Scheduled(fixedDelayString = "${orbit.guardians.wip-staleness-interval:PT5M}")
         public void sweepStaleWorktreeSnapshots() {
             Integer updated = tx.execute(status -> jdbc.update(
@@ -205,7 +203,6 @@ public class P1LifecycleGuardiansAutoConfiguration {
             }
         }
 
-        /** Scans and collects unreferenced S3/MinIO objects past grace period, logging summary counts. */
         @Scheduled(fixedDelayString = "${orbit.guardians.storage-gc-interval:PT15M}")
         public void auditAndCollectUnreferencedStorageObjects() {
             ObjectStoragePort storage = objectStorageProvider.getIfAvailable();
