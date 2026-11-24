@@ -1,110 +1,178 @@
 # OrbitSpace
 
-围绕团队项目，把成员、代码进度、文档资料和讨论上下文放进同一个协同空间的研发协作平台。
+围绕团队项目构建的研发协作平台，将成员权限、Git 轨道与本地未提交改动（WIP）共享、空间主群聊、文件交付、实时协作文档与 PDF 批注整合进同一个协同空间。
 
-> **改动看得见，讨论有上下文，结论能留下，成果可追溯。**
-
-OrbitSpace 首批面向**使用 Git、需要围绕尚未提交改动（WIP）进行讨论的小型研发团队**（如学生研发小组、技术竞赛团队）。首版（P1）聚焦打造**“预览共享范围 → 主动共享 WIP → 队友在浏览器查看 Patch → 引用快照讨论 → 记录处理结论”**的核心闭环：共享者完成 CLI 安装与设备授权，接收者仅需浏览器与空间访问权限即可参与查看与反馈，无需安装 CLI。
+> 共享者通过 `orbit` CLI 预览并主动上报本地状态或 Patch；团队成员仅需浏览器与空间权限即可查看改动、行级批注、发起带快照引用的讨论并沉淀文档与结论。
 
 ---
 
-## 核心问题与能力矩阵
+## 核心能力
 
-| 协作问题 | 对应能力 |
-|---|---|
-| 聊天、代码、文档分散，讨论缺少上下文 | 在同一空间主群聊中引用代码存档点（Commit / WIP）、代码行、文档段落与文件卡片 |
-| Git 提交无法承载所有未提交改动的讨论 | 经用户主动授权，共享本地 WIP 状态或允许范围内的 Patch 快照，并附带反馈说明 |
-| 讨论结论难以沉淀 | 围绕根消息记录 `OPEN / RESOLVED` 轻量结论与批注，后续扩展至协作文档与历史版本 |
-| 文件刷屏难找、权限和有效期不清楚 | 持久空间文件区、面向指定好友的独立空投、下载会话计数、权限管理与撤回（P2 交付） |
+### 1. 空间管理与全路径撤权
+- **账号与多设备会话**：支持邮箱注册、登录、验证与密码重置，采用短时效 Access Token 搭配 `HttpOnly` Refresh Cookie 与 CSRF 防护。
+- **空间与角色权限**：以 `Space` 组织团队项目，提供邀请链接与 `OWNER` / `ADMIN` / `MEMBER` / `VIEWER` 四级角色控制。
+- **周期隔离与即时撤权**：成员关系绑定独立的授权周期号（`membership_epoch`）。成员被移出或退出空间后，HTTP API、WebSocket 订阅/发送、CLI 设备凭证、快照读取、文件下载与文档协同路径同步失效；重新加入会开启新周期，不自动恢复旧凭证。
 
----
+### 2. 主动式 Git / WIP 共享与轨道画布
+- **主动上报，无后台监控**：CLI 采用 OAuth 设备授权流登录，凭证绑定用户、设备、工程与当前成员授权周期。
+- **隐私过滤与固定载荷确认**：CLI 不直接打包 `.git` 目录，支持 `.orbitignore` 规则与已跟踪敏感文件/明文密钥扫描。`--dry-run` 仅作本地预览；正式上报前先固定待发载荷，扫描并经用户确认后再上传。
+- **顺序控制与受控补传**：每个工作树通过服务端管理的 `worktree_epoch` 与单调递增 `capture_seq` 条件更新当前 WIP 指针，防止乱序上报或迟到事件覆盖新状态；支持通过 `orbit backfill` 按需预览并补传缺失对象。
+- **Web 轨道画布与代码讨论**：前端通过 Web Worker 计算拓扑布局并结合 SVG 渲染提交与 WIP 轨道，提供单点详情、数据充足范围内的双点 Diff 与行级代码批注。
 
-## 产品结构与核心设计原则
+### 3. 空间主群聊与讨论结论
+- **上下文引用卡片**：每个空间包含唯一主群聊，支持文本消息与不可变引用卡片（提交、WIP 快照、代码批注、文件、文档段落与 PDF 批注），引用快照不会随后续新上传发生漂移。
+- **可靠消息同步**：消息写入在同一数据库事务内完成权限校验、房间加锁与序号分配（`seq` / `event_seq`），写入消息与 `outbox_events` 并提交后才返回 ACK；支持 `client_msg_id` 幂等与双游标断线补拉。
+- **轻量讨论结论**：支持围绕讨论主题记录与切换 `OPEN` / `RESOLVED` 状态。
 
-### 1. 以 Space 为中心组织协作
-- **空间结构**：每个团队项目对应一个 `Space`，内置成员与角色权限体系（`OWNER` / `ADMIN` / `MEMBER` / `VIEWER`）以及**唯一主群聊**，并挂载多个 Git 工程轨道；后续按阶段扩展空间文件区（P2）、协作文档（P3）与面向指定好友的独立文件空投（P2）。
-- **权限与撤权**：所有空间资源默认继承空间权限。成员被移出空间后，对应成员授权周期（`membership_epoch`）结束，所有已上线路径（API、群聊订阅与发送、CLI 凭证、快照读取等）立即执行撤权；重新加入不自动恢复旧凭证。
+### 4. 文件交付与好友空投
+- **空间文件区**：继承空间权限，支持分片上传与对象存储分离管理（元数据存 MySQL，对象内容存 S3 兼容存储）。
+- **好友与独立空投**：支持好友管理、面向指定好友的独立文件空投与授权下载管理。
 
-### 2. 主动共享与隐私保护
-- **主动上报，非监控工具**：WIP 仅代表成员**最后一次主动共享的工作状态**，不默认后台采集，也不用于工作量统计或绩效衡量。
-- **设备授权分离**：CLI 接入参考 [OAuth 2.0 Device Authorization Grant (RFC 8628)](https://datatracker.ietf.org/doc/html/rfc8628)，将用户输入短码 `user_code` 与 CLI 高熵凭证 `device_code` 分离，凭证绑定用户、设备、工程与当前成员授权周期。
-- **固定载荷预览与扫描**：CLI 不直接打包 `.git` 目录，支持 `.orbitignore`、敏感路径隐藏以及对已跟踪敏感文件和密钥的扫描。`--dry-run` 仅作单次采集预览；正式上传前先固定待发载荷，对同一载荷执行扫描、最终预览并取得用户确认后再发送，载荷变化时必须重新预览确认。
-
-### 3. 诚实的数据能力边界
-系统严格区分客户端共享的数据等级与文件逐项可用性，**有提交 SHA 和 Patch 不代表服务端拥有完整代码树**：
-
-| 数据等级 | 支持能力 | 不承诺的能力 |
-|---|---|---|
-| `METADATA_ONLY` | 轨道拓扑、文件状态、改动统计 | 查看代码内容 |
-| `PATCH_ONLY` | 查看该次允许范围内的变化、下载 Patch | 任意两点完整代码对比 |
-| `TREE_AVAILABLE` | 在对象完整且获授权的范围内重建文件树并比较节点 | 还原未上传或被排除的文件 |
-
-每次共享同步携带 `content_manifest`（`AVAILABLE`、`ABSENT_CONFIRMED`、`NOT_SHARED`、`MISSING`、`UNSUPPORTED`），**严格区分“未共享 / 缺失”与“实际删除”**。原始 Git OID 与经筛选、脱敏或重组生成的快照 ID 分开保存，不冒充原始 Git 对象。
+### 5. 协作文档、PDF 阅读批注与受控异步集成
+- **多人协作文档**：前端集成 TipTap + Yjs，由独立 Hocuspocus 服务承接实时协同，后端维护持久化快照、历史版本与可定位的引用锚点。
+- **PDF 阅读与批注**：支持空间内 PDF 文件阅读、索引与批注转发至主群聊。
+- **受控异步解析与远端同步**：Python Worker 消费 Redis Streams 异步任务（Diff 补全、缩略图、PDF 索引、远端 Git 拉取与附来源摘要）；受控远端 Git 同步通过独立 `egress-proxy` 与可信主机白名单隔离网络出站，结果写回前在业务事务内校验任务与资源生命周期版本，防止迟到任务覆盖或复活已取消/撤权内容。
 
 ---
 
-## CLI 交互形态（规划设计）
+## 数据能力边界
 
-> 以下命令形态对应规划方案中的设计接口，将随 P1 CLI 模块开发落地。
+OrbitSpace 严格区分客户端实际共享的数据级别，不会凭空还原未上传或被排除的文件：
+
+| 数据等级 | 支持能力 | 边界说明 |
+| :--- | :--- | :--- |
+| `METADATA_ONLY` | 轨道拓扑、文件变更状态与统计 | 不可查看代码正文 |
+| `PATCH_ONLY` | 查看当次允许范围内的变化与补丁 | 不承诺任意两点完整代码树对比 |
+| `TREE_AVAILABLE` | 在对象完整且获授权范围内重建文件树并对比 | 不还原未共享或已排除文件 |
+
+每次共享同步附带 `content_manifest`（`AVAILABLE`、`ABSENT_CONFIRMED`、`NOT_SHARED`、`MISSING`、`UNSUPPORTED`），明确区分“未共享 / 缺失”与“文件已删除”；原始 Git OID 与脱敏/筛选后的快照 ID 分开保存。
+
+---
+
+## 系统架构与目录结构
+
+项目采用 **Java 21 模块化单体 + 按职责拆分的扩展服务** 架构，通过 OpenAPI 与 JSON Schema 维护跨端契约：
+
+```text
+.
+├── apps/
+│   ├── server/                   # Java 21 + Spring Boot 3.5 模块化单体（Maven 多模块）
+│   │   ├── orbit-kernel/         # 跨模块 SPI 端口、领域异常、枚举与公共模型
+│   │   ├── orbit-platform/       # 对象存储、Outbox、邮件与撤权恢复底座
+│   │   ├── orbit-security/       # 鉴权、CSRF、空间角色切面与 WebSocket 安全
+│   │   ├── orbit-mod-identity/   # 账号、多设备会话与 CLI 设备授权
+│   │   ├── orbit-mod-space/      # 空间、邀请与成员授权周期管理
+│   │   ├── orbit-mod-chat/       # 空间主群聊、双游标事件与讨论结论
+│   │   ├── orbit-mod-gitproject/ # Git 工程、WIP 状态、补传、批注与远端配置
+│   │   ├── orbit-mod-friendship/ # 好友关系
+│   │   ├── orbit-mod-file/       # 分片上传、空间文件区与独立空投
+│   │   ├── orbit-mod-document/   # 协作文档、版本快照、PDF 批注与摘要
+│   │   ├── orbit-mod-integration/# 异步任务调度、HMAC 内部回调与出口策略
+│   │   └── orbit-app/            # 应用装配入口、Flyway 迁移与守护任务
+│   ├── web/                      # React 19 + TypeScript + Vite + Tailwind CSS v4 前端工作台
+│   └── cli/                      # Node.js + TypeScript 主动共享命令行工具（orbit）
+├── packages/
+│   └── shared-types/             # 由 OpenAPI 契约生成的共享 TypeScript 类型包
+├── services/
+│   ├── collab-hocuspocus/        # Node.js + Hocuspocus Yjs 实时文档协同服务
+│   └── worker-py/                # Python Redis Streams 异步解析与远端拉取 Worker
+├── contracts/                    # OpenAPI 契约与 WebSocket / CLI JSON Schema
+├── infra/                        # Docker Compose 编排、Nginx 本地 TLS、MinIO 与出口代理
+├── package.json
+├── pnpm-workspace.yaml
+├── tsconfig.base.json
+└── LICENSE
+```
+
+### 核心技术栈
+
+| 层次 | 技术实现 |
+| :--- | :--- |
+| **核心服务端** | Java 21、Spring Boot 3.5、Spring Security、Spring WebSocket、Flyway |
+| **Web 前端** | React 19、TypeScript、Vite、Tailwind CSS v4、Zustand、TanStack Query、TipTap、Yjs、pdfjs-dist |
+| **命令行工具** | Node.js、TypeScript、Commander、Zod（直接调用系统 `git`） |
+| **协作与解析服务** | Hocuspocus（Node.js + ioredis）、Python Worker（redis、boto3、httpx、Pillow、PyMuPDF） |
+| **基础设施** | MySQL 8.4、Redis 7.4、MinIO（S3 兼容）、Mailpit（本地邮件）、Nginx（TLS 反向代理） |
+
+---
+
+## 本地启动与开发
+
+### 环境要求
+- Docker 与 Docker Compose
+- Node.js `^22.18.0 || ^24.11.0 || >=26.0.0` 与 `pnpm@11.25.0`（构建前端、CLI 或共享类型时）
+- Java 21 与 Maven 3.9+（宿主机直接构建后端时）
+- Python `>= 3.9`（宿主机直接运行 `worker-py` 时）
+
+### 方式一：通过 Docker Compose 启动
+
+[infra/docker-compose.yml](./infra/docker-compose.yml) 提供按需组合的启动 Profile：
 
 ```bash
-# 浏览器完成设备与账号授权
-orbit login
+# 1. 仅启动基础设施（MySQL、Redis、MinIO、Mailpit、Nginx 本地 TLS），适合宿主机联调后端与前端
+docker compose -f infra/docker-compose.yml up -d --build
 
-# 关联本地工作树与空间中的 Git 工程
-orbit init --project <project-id>
+# 2. 启动核心全栈（基础设施 + server + web）
+docker compose -f infra/docker-compose.yml --profile fullstack up -d --build
 
-# 默认仅上报分支、HEAD 与工作区状态等元信息
-orbit push-state
+# 3. 启动含 Python 异步 Worker 的环境（基础设施 + server + web + worker-py）
+docker compose -f infra/docker-compose.yml --profile p2 up -d --build
 
-# 预览本次采集的文件清单、共享范围与排除项
-orbit push-state --with-diff --dry-run
+# 4. 启动完整服务（额外包含 collab-hocuspocus 与受控 egress-proxy）
+docker compose -f infra/docker-compose.yml --profile p3 up -d --build
+```
 
-# 锁定载荷并经确认后，显式共享允许范围内的 WIP Patch
-orbit push-state --with-diff
+启动后的本地入口（默认仅绑定 `127.0.0.1`）：
+- **Web 与 API 入口**：`https://localhost:8443`
+- **Mailpit 本地邮件收件箱**（用于查看注册验证与重置密码邮件）：`http://localhost:8025`
+- **MinIO 控制台**：`http://localhost:9001`
+
+Nginx 会在首次启动时自动生成本地自签名 TLS 证书，可按需导出供本机信任或 `curl --cacert` 使用：
+
+```bash
+docker compose -f infra/docker-compose.yml cp \
+  nginx:/etc/nginx/local-tls/localhost.crt /tmp/orbitspace-localhost.crt
+```
+
+> **安全提示**：[infra/env.example](./infra/env.example) 与 [infra/docker-compose.yml](./infra/docker-compose.yml) 中的默认密码和密钥均为**本地开发占位符**。部署至非本机环境前，务必通过外部环境变量或私有 `--env-file` 替换 `MYSQL_ROOT_PASSWORD`、`MYSQL_PASSWORD`、`MINIO_ROOT_USER`、`MINIO_ROOT_PASSWORD`、`ORBIT_AUTH_JWT_KEY`、`ORBIT_GIT_KEY_V1` 与 `ORBIT_INTERNAL_HMAC_SECRET`。
+
+### 方式二：宿主机分模块构建与开发
+
+```bash
+# 安装 JS/TS 工作区依赖
+pnpm install
+
+# 从 contracts/openapi/*.yaml 重新生成共享类型
+pnpm --filter @orbitspace/shared-types build
+
+# 启动 Web 开发服务器（需先启动基础设施与后端）
+pnpm --filter @orbitspace/web dev
+
+# 构建前端与 CLI
+pnpm --filter @orbitspace/web... build
+pnpm --filter @orbitspace/cli... build
+
+# 构建 Java 后端可执行 JAR
+mvn -f apps/server/pom.xml clean package -DskipTests
 ```
 
 ---
 
-## 技术架构（推荐选型与模块划分）
+## CLI 命令速查
 
-架构以 **Java 模块化单体** 为核心，在对应阶段按职责接入协同服务与耗时解析 Worker，避免过早微服务拆分：
+构建完成后，可通过 `apps/cli/dist/cli.js`（或安装后的 `orbit` 命令）执行主动共享。全局支持 `--server <origin>` 选项或 `ORBITSPACE_SERVER` 环境变量（默认 `https://localhost:8443`）：
 
-| 层次 | 推荐选型 | 核心职责 |
-|---|---|---|
-| **Web 前端** | React + TypeScript、Tailwind CSS、Zustand、TanStack Query | 页面导航、空间布局、状态管理与服务端缓存 |
-| **Git 轨道画布** | SVG + Web Worker + 视口虚拟化 | 前端提交拓扑计算、泳道分配与缩放平移渲染 |
-| **核心服务** | Java 21、Spring Boot、Spring Security、Spring WebSocket | 身份认证、空间 ACL、群聊协议、工程、文件与业务事务 |
-| **实时聊天** | Spring WebSocket + 原生消息协议 | ACK 确认、引用卡片、在线通知与断线恢复 |
-| **数据库** | MySQL | 业务元数据、消息序列、事件日志与持久状态 |
-| **缓存与队列** | Redis | 在线状态、限流、缓存、Pub/Sub 在线通知与 Streams 任务流 |
-| **对象存储** | S3 兼容存储（如 MinIO） | Patch、文件、文档快照与解析产物（与业务表大字段分离） |
-| **CLI** | Node.js + TypeScript（调用系统 Git） | 本地设备授权、状态采集、隐私过滤与固定载荷上传 |
-| **协同服务（P3）** | Node.js + Hocuspocus（配合前端 TipTap + Yjs） | 富文本协同连接、CRDT 状态同步与持久化集成 |
-| **解析 Worker（P2/P3）** | Python 任务 Worker（按需提供 FastAPI 接口） | Git 深层分析、PDF 提取、缩略图与附来源 AI 摘要 |
+| 命令 | 说明 | 常用选项 |
+| :--- | :--- | :--- |
+| `orbit login` | 通过浏览器完成 CLI 设备授权 | `--device-label <name>`、`--metadata-only` |
+| `orbit init` | 将当前 Git 工作树绑定到空间工程并初始化代次 | `--project <project-id>`（必填） |
+| `orbit push-state` | 预览或主动共享当前工作树状态与允许范围内的 Patch | `--dry-run`、`--with-diff`、`-m, --message <note>` |
+| `orbit backfill` | 检查缺失对象并在本地预览确认后受控补传 | `--target <ref-or-id>`（必填）、`--base <ref-or-id>`、`--project <id>`、`--dry-run` |
 
-Java 核心应用内部按领域划分模块：`identity`、`friendship`、`space`、`chat`、`gitproject`、`document`、`file`、`integration`。P1 运行单实例 Java 应用，仅启用当期交付模块。
-
-### 可靠性与一致性机制
-- **消息与状态同步**：聊天写入在同一数据库事务内完成权限校验、房间加锁与 `seq` 分配、`chat_messages` 写入、`chat_events`（`event_seq`）写入与 `outbox_events` 写入，提交后才返回 ACK；支持 `client_msg_id` 幂等与断线双游标补拉。
-- **WIP 顺序控制**：通过 `worktree_id`、`worktree_epoch` 与单调递增的 `capture_seq` 条件更新当前快照指针，防止乱序上报、并发重试或迟到 `clean` 事件覆盖最新状态；群聊卡片永久指向当时的不可变快照 ID。
-- **异步任务恢复**：采用 Outbox + Redis Streams 至少一次投递与幂等消费，结果回写时在同一事务校验输入版本、任务状态与资源生命周期版本，杜绝已取消或已撤权任务的迟到结果复活失效数据。
+CLI 本地凭证与工作树状态保存在 `~/.orbitspace/`（位于 Git 工作树之外），并强制校验 `0600` 文件权限与并发文件锁。
 
 ---
 
-## 分阶段实施路线
+## 开源许可
 
-项目按 **P1 → P2 → P3** 分阶段交付可独立使用、可独立验收的闭环。每个阶段开放新访问路径时，均须同步完成当期的鉴权、撤权、幂等与基础失败恢复。
-
-| 阶段 | 功能范围 | 阶段完成标准 |
-|---|---|---|
-| **P1：主动共享与讨论闭环** | 账号登录与多设备会话、Space 与链接邀请、角色权限、单空间主群聊、设备授权、CLI 元信息与显式 Patch 上传、共享预览与 `.orbitignore`、Git 画布与单点详情、不可变快照卡片、回复及 `OPEN / RESOLVED` 结论；覆盖当期撤权、消息/上传幂等与 WIP 顺序控制 | 两名用户加入同一空间；上传者完成授权、预览并共享获准改动；接收者仅用浏览器即可查看、回复、记录结论并在后续新状态上传后仍定位回原快照；通过断网、乱序、撤权与试用验证 |
-| **P2：工程讨论与可靠文件交付** | 内容补传、受支持范围内的双点 Diff、行级代码批注与引用、增量同步、空间文件区、分片断点续传、下载会话计数、面向好友的独立空投及基础好友关系；扩展文件与解析任务撤权恢复 | 在真实项目中完成有行级定位依据的代码讨论与文件交付；数据不完整时准确标注比较边界；通过并发传输、断网续传、分享撤回及任务迟到测试 |
-| **P3：文档和资料协作扩展** | TipTap + Yjs + Hocuspocus 协作文档、不可变引用边界与版本恢复、受控远端 Git 仓库接入（含 SSRF 防护）、PDF 精读批注、附来源的 AI 摘要 | 代码、文档与文件在同一主群聊形成可追溯讨论；通过文档保存与恢复、远端出站安全约束、PDF 解析与 AI 权限范围验收 |
-
----
-
-## 当前状态与开源许可
-
-- **当前状态**：仓库目前处于初始化与 P1 规划落地准备阶段。本文档所述技术选型、模块划分及路线图均来源于项目规划设计目标，尚未代表已完成代码实现或已实测的性能指标。
-- **开源许可**：本项目基于 [Apache License 2.0](./LICENSE) 开源。
+本项目基于 **Apache License 2.0** 开源，详见 [LICENSE](./LICENSE)。
